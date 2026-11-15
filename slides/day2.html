@@ -1,5 +1,5 @@
 <section class="slide title" id="title" data-auto="title">
-  <aside class="notes">REPLACE: welcome; introduce yourself; one question to the room that calibrates the pace; the rhythm of the day</aside>
+  <aside class="notes"><p>Welcome back. Ask the room: who has shipped a container image that was bigger than a gigabyte? Yesterday Farz became a service with a contract and two health checks; today it becomes an image and runs on a cluster. Same rhythm: four sessions, each with a 25-minute lab.</p><p>Before session 1, check who has a running container runtime. Anyone without one pairs with a neighbour for the build steps; the lab checks still review their files.</p></aside>
 </section>
 
 <section class="slide" id="agenda" data-auto="agenda"></section>
@@ -8,151 +8,421 @@
 
 <section class="slide section" id="s1" data-auto="section" data-session="1"></section>
 
-<section class="slide" id="s1-idea" data-lo="LO4">
-  <div class="kicker">REPLACE: the question this slide answers</div>
-  <h2>REPLACE: one idea, stated as a sentence</h2>
+<section class="slide" id="what-an-image-is" data-lo="LO4">
+  <div class="kicker">An image</div>
+  <h2>An image is a stack of read-only layers and a few settings</h2>
   <div class="cols cols-2">
     <ul class="bullets">
-      <li>REPLACE: at most six bullets, each a complete thought</li>
-      <li>REPLACE: bold the key phrase; numbers come from the lab run, not from memory</li>
+      <li>Each <code>RUN</code>, <code>COPY</code> and <code>ADD</code> line adds a <b>layer</b>: the files it changed</li>
+      <li><code>ENV</code>, <code>USER</code>, <code>CMD</code> and <code>EXPOSE</code> only change the <b>configuration</b>, which anyone who pulls the image can read</li>
+      <li>A container is the image plus one thin writable layer that disappears with it</li>
     </ul>
-    <div class="card c-teal"><h4>In the case study</h4><p class="small mb0">REPLACE: tie the idea to the case study and its data</p></div>
+    <div class="card c-teal"><h4>In the case study</h4><p class="small mb0">One image, <code>rifd/claims:1.0.0</code>, serves both Farz and Shabih; <code>RIFD_SERVICE</code> picks which one starts.</p></div>
   </div>
-  <div class="callout warn mt"><b>What goes wrong.</b> REPLACE: the failure participants will hit, and how to recognise it</div>
-  <aside class="notes">REPLACE: what to say, the demo to run, the question to ask the room, the common failure and its fix</aside>
+  <aside class="notes"><p>The Open Container Initiative image specification defines this: an image is a manifest, a configuration and an ordered list of layers. Ask: if a later layer deletes a file an earlier layer added, is the file gone from the image? No, it is hidden but still shipped. That matters for secrets in session 2.</p></aside>
 </section>
 
-<section class="slide" id="s1-steps" data-lo="LO4">
-  <div class="kicker">Step by step</div>
-  <h2>REPLACE: a process, shown one step per key press</h2>
-  <div class="flow">
-    <div class="step c-teal"><b>1 · REPLACE: name</b>REPLACE: what happens first</div>
-    <div class="arrow frag" data-frag="b">→</div><div class="step c-cyan frag" data-frag="b"><b>2 · REPLACE: name</b>REPLACE: the next piece</div>
-    <div class="arrow frag" data-frag="c">→</div><div class="step c-coral frag" data-frag="c"><b>3 · REPLACE: name</b>REPLACE: the result</div>
+<section class="slide" id="build-cache" data-lo="LO4">
+  <div class="kicker">The build cache</div>
+  <h2>Change a file, and every layer after the line that copied it is rebuilt</h2>
+  <div class="cols cols-2">
+    <pre class="code s" data-file="Dockerfile.naive"><code class="language-docker">FROM python:3.12
+WORKDIR /app
+COPY . .
+RUN pip install uv &amp;&amp; uv sync</code></pre>
+    <pre class="code s" data-file="Dockerfile · build stage"><code class="language-docker">COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
+COPY src ./src
+RUN uv sync --frozen --no-dev</code></pre>
   </div>
-  <div class="callout tip mt frag"><b>Takeaway.</b> REPLACE: the one sentence to remember</div>
-  <aside class="notes">Press once per step and say what each step adds before the next one appears. REPLACE: the example to walk through</aside>
+  <div class="callout tip mt"><b>Order by how often things change.</b> The lock changes rarely, the code often: copy the lock first and the dependency layer stays cached.</div>
+  <aside class="notes"><p>On the left, any edit to any file in the folder invalidates <code>COPY . .</code>, so every build reinstalls every dependency. On the right, a code change rebuilds only the last two lines. The <code>--no-install-project</code> pattern is from uv's Docker guide. Ask the room to predict what a change to <code>uv.lock</code> rebuilds on the right: everything from the second line.</p></aside>
+</section>
+
+<section class="slide" id="multi-stage" data-lo="LO4">
+  <div class="kicker">Multi-stage builds</div>
+  <h2>Build in one stage, ship only the result from a second</h2>
+  <div class="flow">
+    <div class="step c-navy"><b>Stage 1 · build</b>slim base, uv, the lock, <code>uv sync --frozen --no-dev</code></div>
+    <div class="arrow frag" data-frag="b">→</div>
+    <div class="step c-teal frag" data-frag="b"><b>COPY --from=build</b><code>.venv</code>, <code>src</code>; then <code>models/</code></div>
+    <div class="arrow frag" data-frag="c">→</div>
+    <div class="step c-coral frag" data-frag="c"><b>Stage 2 · runtime</b>a fresh slim base, user 10001, no uv, no caches</div>
+  </div>
+  <div class="callout tip mt frag" data-frag="c"><b>Takeaway.</b> Whatever the build needed and the service does not stays in stage 1 and never ships.</div>
+  <aside class="notes"><p>Press once per step. The runtime stage starts from the same base so that the virtual environment's interpreter path still works. <code>--frozen</code> installs exactly what the lock says without solving again or checking it against <code>pyproject.toml</code> (<code>--locked</code> would also fail when the lock is out of date); <code>--no-dev</code> leaves out pytest, Locust and pip-audit.</p></aside>
+</section>
+
+<section class="slide" id="base-and-user" data-lo="LO4">
+  <div class="kicker">Two small lines</div>
+  <h2>A slim base and a non-root user cost nothing and remove a lot</h2>
+  <div class="cols cols-2">
+    <div class="card c-teal flat"><h4>python:3.12-slim</h4><p class="small mb0">Debian with the minimum Python needs. The full <code>python:3.12</code> image adds compilers and headers, which a service that installs wheels does not use and a scanner still reports.</p></div>
+    <div class="card c-coral flat"><h4>USER 10001</h4><p class="small mb0">A process that escapes the service holds no root rights in the container. The cluster can enforce it with <code>runAsNonRoot</code> in the manifest.</p></div>
+  </div>
+  <div class="callout warn mt"><b>What goes wrong.</b> A tag like <code>python:3</code> or <code>latest</code> moves under you: pin the tag, or the digest when two builds must be identical.</div>
+  <aside class="notes"><p>The verified images of the course's run are <code>python:3.12-slim</code> and <code>ghcr.io/astral-sh/uv:0.13.5</code>. Distroless or Alpine bases are smaller still; Alpine uses musl, so some wheels must be built from source. For this course, slim is the default and the stretch asks for a digest pin.</p></aside>
+</section>
+
+<section class="slide" id="dockerignore" data-lo="LO4">
+  <div class="kicker">The build context</div>
+  <h2>What the build never sees cannot leak into the image</h2>
+  <div class="cols cols-2">
+    <pre class="code s" data-file=".dockerignore"><code class="language-text">.venv
+.git
+tests
+notebook
+runs
+secrets
+.env</code></pre>
+    <ul class="bullets small">
+      <li>The build sends the folder to the builder; <code>.dockerignore</code> leaves paths out</li>
+      <li><code>.venv</code> is built for your laptop, not the image</li>
+      <li><code>secrets</code> and <code>.env</code>: a later <code>COPY .</code> by a colleague would ship them</li>
+      <li>Tests and the notebook are evidence for the repository, not the runtime</li>
+    </ul>
+  </div>
+  <aside class="notes"><p>The file of the course's project has a few more lines (caches, logs, recorded series). Ask: Farz's runtime stage copies <code>models/</code>; which file in it must never be there? None: the artefacts are meant to ship, and the sha256 in <code>metadata.json</code> proves which ones did.</p></aside>
+</section>
+
+<section class="slide" id="measure-image" data-lo="LO4">
+  <div class="kicker">Lab 2.1 · what to record</div>
+  <h2>Three numbers compare two container files</h2>
+  <table class="t small">
+    <tr><th></th><th>Dockerfile.naive</th><th>Dockerfile (multi-stage)</th></tr>
+    <tr><td>Image size (<code>docker image ls</code>)</td><td>your number</td><td>your number; the check asks under 500 MB</td></tr>
+    <tr><td>First build time</td><td>your number</td><td>your number</td></tr>
+    <tr class="hl"><td>Rebuild after a one-line code change</td><td>reinstalls everything</td><td>only the code layers</td></tr>
+    <tr><td>Runs as</td><td>root</td><td>user 10001</td></tr>
+  </table>
+  <aside class="notes"><p>The course's own run had no container daemon, so this table has no measured sizes: the trainer fills it from a rehearsal on the room's machines before the course. Most of the size difference comes from the base image and the development dependencies; most of the rebuild difference comes from the layer order.</p></aside>
+</section>
+
+<section class="slide" id="check-layers" data-lo="LO4">
+  <div class="kicker">Checkpoint</div>
+  <h2>What does this change rebuild?</h2>
+  <div class="quiz" data-type="single" data-lo="LO4">
+    <p class="lead">A container file copies <code>pyproject.toml</code> and <code>uv.lock</code>, runs <code>uv sync --no-install-project</code>, copies <code>src</code>, and runs <code>uv sync</code> again. A colleague edits one function in <code>src/rifd/app.py</code> and rebuilds. What runs again?</p>
+    <div class="opts">
+      <div class="opt" data-why="Assumes any change invalidates the whole cache; the cache is per line, in order">Every line, from the base image down</div>
+      <div class="opt" data-ok>The copy of src and the second uv sync, which installs only the project</div>
+      <div class="opt" data-why="Thinks the lock is re-read on every build; it was not changed, so its layer is reused">The first uv sync, because the dependencies must be checked</div>
+      <div class="opt" data-why="Forgets that the copied code is part of the layer's key: a changed file invalidates it">Nothing, because the dependencies did not change</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> A layer is reused while its line and the files it copies are unchanged; the first line whose input changed, and everything after it, runs again.</div>
+  </div>
+  <aside class="notes"><p>Answer: B. If many choose D, show the naive file again: there, a code change reinstalls everything, because <code>COPY . .</code> sits above the install.</p></aside>
 </section>
 
 <section class="slide lab" id="lab-2-1" data-auto="lab" data-lab="2.1">
-  <aside class="notes">REPLACE: what to watch for while participants work, the typical problems, and the fallback for anyone who did not finish an earlier lab</aside>
+  <aside class="notes"><p>AI policy: off for the first attempt at the container file; afterwards participants may compare with an assistant's version and say what differs. Usual problems: no daemon running (Docker Desktop not started); <code>uv sync</code> without <code>--frozen</code> solving again inside the build; the runtime stage forgetting <code>models/</code>; Windows line endings in a shell script. Without a runtime the check reviews the files and says the image was not measured. Solution: <code>labs/solutions/S2_1.py</code>.</p></aside>
 </section>
 
 <!-- Session 2 -->
 
 <section class="slide section" id="s2" data-auto="section" data-session="2"></section>
 
-<section class="slide" id="s2-idea" data-lo="LO4">
-  <div class="kicker">REPLACE: the question this slide answers</div>
-  <h2>REPLACE: one idea, stated as a sentence</h2>
+<section class="slide" id="what-a-scanner-reads" data-lo="LO4">
+  <div class="kicker">Vulnerability scanning</div>
+  <h2>A scanner matches what is installed against lists of known flaws</h2>
   <div class="cols cols-2">
-    <ul class="bullets">
-      <li>REPLACE: at most six bullets, each a complete thought</li>
-      <li>REPLACE: bold the key phrase; numbers come from the lab run, not from memory</li>
-    </ul>
-    <div class="card c-teal"><h4>In the case study</h4><p class="small mb0">REPLACE: tie the idea to the case study and its data</p></div>
+    <div class="card c-teal flat"><h4>It reads</h4><ul class="bullets small mb0"><li>the system packages of the base image</li><li>the language packages: a lock file, or the installed environment</li></ul></div>
+    <div class="card c-cyan flat"><h4>It compares with</h4><ul class="bullets small mb0"><li>advisory databases such as OSV and the GitHub advisories</li><li>each advisory names affected versions and the version that fixes it</li></ul></div>
   </div>
-  <div class="callout warn mt"><b>What goes wrong.</b> REPLACE: the failure participants will hit, and how to recognise it</div>
-  <aside class="notes">REPLACE: what to say, the demo to run, the question to ask the room, the common failure and its fix</aside>
+  <div class="callout note mt"><b>A scan is a date.</b> The same image scanned next month can report more: new advisories are published every day.</div>
+  <aside class="notes"><p>Trivy and Grype scan images, both system and language packages; pip-audit scans Python dependencies from a requirements file or an environment. The lab uses pip-audit, which runs without a container runtime, and the trainer may show Trivy on the image. A scanner finds known flaws in packages; it does not find bugs in Rifd's own code.</p></aside>
 </section>
 
-<section class="slide" id="s2-steps" data-lo="LO4">
-  <div class="kicker">Step by step</div>
-  <h2>REPLACE: a process, shown one step per key press</h2>
+<section class="slide" id="read-a-report" data-lo="LO4">
+  <div class="kicker">Lab 2.2 · step 1</div>
+  <h2>The supplied lock carries an h11 with a critical advisory</h2>
+  <pre class="code" data-file="terminal"><code class="language-bash">$ uv run pip-audit -r runs/requirements-audit.txt --no-deps --disable-pip --aliases
+Found 2 known vulnerabilities in 1 package
+Name Version ID             Fix Versions Aliases
+---- ------- -------------- ------------ -----------------------------------
+h11  0.14.0  PYSEC-2026-348 0.16.0       GHSA-vqfr-h8mv-ghfj, CVE-2025-43859
+h11  0.14.0  PYSEC-2026-348 0.16.0       GHSA-vqfr-h8mv-ghfj, CVE-2025-43859</code></pre>
+  <ul class="bullets small mt">
+    <li><b>h11</b> parses HTTP/1.1 for uvicorn: it reads every request Farz receives</li>
+    <li>One advisory, listed twice, rated <b>critical</b> by GitHub: lenient parsing of the line endings in chunked bodies allows <b>request smuggling</b> behind a proxy that parses differently</li>
+  </ul>
+  <aside class="notes"><p>Real output of the course's run on 15 November 2026, columns shortened (the course's run added <code>--desc</code> to read the description). "2 known vulnerabilities" is the same advisory under one id, printed twice: read the ids, not the count. pip-audit does not print severity; the rating comes from the GitHub advisory. Advisory databases change, so run it the week before. Read the advisory with the room: the risk needs a front proxy with its own parsing flaw, which is exactly how Farz is deployed behind the cluster's ingress. Severity is a starting point; whether the path exists in your deployment is the question.</p></aside>
+</section>
+
+<section class="slide" id="fix-first" data-lo="LO4">
+  <div class="kicker">Which finding first</div>
+  <h2>Fix the most severe finding that has a fix, then scan again</h2>
   <div class="flow">
-    <div class="step c-teal"><b>1 · REPLACE: name</b>REPLACE: what happens first</div>
-    <div class="arrow frag" data-frag="b">→</div><div class="step c-cyan frag" data-frag="b"><b>2 · REPLACE: name</b>REPLACE: the next piece</div>
-    <div class="arrow frag" data-frag="c">→</div><div class="step c-coral frag" data-frag="c"><b>3 · REPLACE: name</b>REPLACE: the result</div>
+    <div class="step c-coral"><b>1 · Sort</b>by severity and by whether the code path is reachable</div>
+    <div class="arrow">→</div>
+    <div class="step c-amber"><b>2 · Fix</b>move to the fixed version: bound in pyproject, exact in the lock</div>
+    <div class="arrow">→</div>
+    <div class="step c-teal"><b>3 · Prove</b>rescan, run the tests, rebuild</div>
+    <div class="arrow">→</div>
+    <div class="step c-navy"><b>4 · Record</b>findings with no fix: advisory, reason, date to look again</div>
   </div>
-  <div class="callout tip mt frag"><b>Takeaway.</b> REPLACE: the one sentence to remember</div>
-  <aside class="notes">Press once per step and say what each step adds before the next one appears. REPLACE: the example to walk through</aside>
+  <div class="callout warn mt"><b>What goes wrong.</b> Suppressing a finding in the scanner's configuration makes the report clean and leaves the flaw running.</div>
+  <aside class="notes"><p>In the lab: <code>h11&gt;=0.16</code> in <code>pyproject.toml</code>, then <code>uv lock --upgrade-package h11</code>, which moved the lock to 0.16.0 in the course's run, and pip-audit then found no known vulnerability. The contract tests from Day 1 still pass: that is the proof the upgrade broke nothing.</p></aside>
+</section>
+
+<section class="slide" id="secret-in-layers" data-lo="LO4">
+  <div class="kicker">Secrets</div>
+  <h2>A key in an ENV line is readable by anyone who can pull the image</h2>
+  <div class="cols cols-2">
+    <pre class="code s" data-file="supplied/Dockerfile"><code class="language-docker">ENV RIFD_LOOKUP_KEY=rifd-lookup-key-for-the-labs-only \
+    RIFD_MODEL_DIR=/app/models/farz-1.0.0</code></pre>
+    <ul class="bullets small">
+      <li><code>docker history --no-trunc</code> and <code>docker inspect</code> print it</li>
+      <li>Deleting it in a later layer hides it, does not remove it</li>
+      <li>Every pushed copy keeps it: <b>rotate</b> the key, then fix the file</li>
+    </ul>
+  </div>
+  <div class="callout tip mt"><b>Supply it at run time.</b> An environment variable from the runtime, a mounted file, or a cluster Secret; a key the build needs goes through BuildKit's <code>--mount=type=secret</code>.</div>
+  <aside class="notes"><p>The key in the lab is a fake made for the labs. The lab's check also searches every text file of the project for it, because the code had it too, in <code>settings.py</code>. Ask: who could pull the supplied image last quarter? Everyone with access to the registry, and every laptop that ever pulled it.</p></aside>
+</section>
+
+<section class="slide" id="config-from-env" data-lo="LO4">
+  <div class="kicker">Configuration</div>
+  <h2>The service reads its settings; the runtime decides them</h2>
+  <pre class="code s" data-file="src/rifd/settings.py"><code class="language-python">def _secret(name: str) -&gt; str:
+    """A secret comes from the environment, or from a file the runtime mounts."""
+    if os.environ.get(name):
+        return os.environ[name]
+    path = Path(os.environ.get(name + "_FILE", "secrets/lookup.key"))
+    return path.read_text(encoding="utf-8").strip() if path.is_file() else ""
+
+lookup_key: str = field(default_factory=lambda: _secret("RIFD_LOOKUP_KEY"))</code></pre>
+  <ul class="bullets small mt">
+    <li>Same image in every environment; only the configuration differs</li>
+    <li><code>secrets/</code> is in <code>.gitignore</code> and <code>.dockerignore</code></li>
+  </ul>
+  <aside class="notes"><p>From the course's <code>settings.py</code>, with the docstring shortened. This is the twelve-factor rule "store config in the environment", with a file as a second source because a cluster mounts Secrets as files as well as variables. The check sets the variable and confirms the service reads it.</p></aside>
+</section>
+
+<section class="slide" id="check-scan" data-lo="LO4">
+  <div class="kicker">Checkpoint</div>
+  <h2>Which finding do you fix first?</h2>
+  <div class="quiz" data-type="single" data-lo="LO4">
+    <p class="lead">A scan of the fraud-review image reports: high, in the HTTP parser, fixed in the next version; critical, in an image library the service never imports, no fix; medium, in the base image, fixed by a newer base. Where do you start?</p>
+    <div class="opts">
+      <div class="opt" data-why="Severity alone ignores that there is no fix and the code is never reached">The critical one, because it is critical</div>
+      <div class="opt" data-why="The newer base is a fix in reach, but a reachable high finding matters more than a medium one">The medium one, because a new base is the easiest change</div>
+      <div class="opt" data-why="Suppressing hides findings without changing what runs">Suppress all three and scan again next quarter</div>
+      <div class="opt" data-ok>The high one in the HTTP parser: it is reachable by every request and has a fix</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> Start with what an attacker can reach and you can fix; record the unfixable one with its reason, and take the new base next.</div>
+  </div>
+  <aside class="notes"><p>Answer: D. Then ask what to write about the critical one: the advisory, why it is not reachable (the library is never imported), and the date to look again. Better still, remove the library if nothing uses it.</p></aside>
 </section>
 
 <section class="slide lab" id="lab-2-2" data-auto="lab" data-lab="2.2">
-  <aside class="notes">REPLACE: what to watch for while participants work, the typical problems, and the fallback for anyone who did not finish an earlier lab</aside>
+  <aside class="notes"><p>AI policy: tutor. pip-audit needs the network to fetch advisories; if the room's network is slow, run it once at the front and share the output. Usual problems: editing <code>uv.lock</code> by hand instead of running <code>uv lock</code>; leaving the key in <code>supplied/Dockerfile</code> (the check searches every file); creating <code>secrets/lookup.key</code> with a trailing space. Solution: <code>labs/solutions/S2_2.py</code>.</p></aside>
 </section>
 
 <!-- Session 3 -->
 
 <section class="slide section" id="s3" data-auto="section" data-session="3"></section>
 
-<section class="slide" id="s3-idea" data-lo="LO4">
-  <div class="kicker">REPLACE: the question this slide answers</div>
-  <h2>REPLACE: one idea, stated as a sentence</h2>
-  <div class="cols cols-2">
-    <ul class="bullets">
-      <li>REPLACE: at most six bullets, each a complete thought</li>
-      <li>REPLACE: bold the key phrase; numbers come from the lab run, not from memory</li>
-    </ul>
-    <div class="card c-teal"><h4>In the case study</h4><p class="small mb0">REPLACE: tie the idea to the case study and its data</p></div>
+<section class="slide" id="cluster-objects" data-lo="LO4">
+  <div class="kicker">A cluster in four objects</div>
+  <h2>You describe what should run; the cluster keeps it running</h2>
+  <div class="cols cols-2 gap-s">
+    <div class="card c-teal"><h4>Deployment</h4><p class="small mb0">How many copies of which image, with which settings; it replaces pods that die.</p></div>
+    <div class="card c-cyan"><h4>Pod</h4><p class="small mb0">One running copy: a container with its probes and limits.</p></div>
+    <div class="card c-purple"><h4>Service</h4><p class="small mb0">One stable address in front of the ready pods that match its selector.</p></div>
+    <div class="card c-amber"><h4>ConfigMap and Secret</h4><p class="small mb0">Settings, and keys, given to the pods as variables or files.</p></div>
   </div>
-  <div class="callout warn mt"><b>What goes wrong.</b> REPLACE: the failure participants will hit, and how to recognise it</div>
-  <aside class="notes">REPLACE: what to say, the demo to run, the question to ask the room, the common failure and its fix</aside>
+  <aside class="notes"><p>The lab uses kind, which runs a whole cluster inside one container; k3d and minikube work the same for this lab. Ask: the Service sends traffic to which pods? Only those whose readiness probe passes: that is where Day 1's <code>/readyz</code> pays off.</p></aside>
 </section>
 
-<section class="slide" id="s3-steps" data-lo="LO4">
-  <div class="kicker">Step by step</div>
-  <h2>REPLACE: a process, shown one step per key press</h2>
-  <div class="flow">
-    <div class="step c-teal"><b>1 · REPLACE: name</b>REPLACE: what happens first</div>
-    <div class="arrow frag" data-frag="b">→</div><div class="step c-cyan frag" data-frag="b"><b>2 · REPLACE: name</b>REPLACE: the next piece</div>
-    <div class="arrow frag" data-frag="c">→</div><div class="step c-coral frag" data-frag="c"><b>3 · REPLACE: name</b>REPLACE: the result</div>
+<section class="slide" id="probes" data-lo="LO4 LO3">
+  <div class="kicker">Probes</div>
+  <h2>Three probes, three different actions</h2>
+  <table class="t small">
+    <tr><th>Probe</th><th>Farz asks</th><th>When it fails, the cluster</th></tr>
+    <tr><td>startupProbe</td><td><code>/readyz</code> every 2 s, up to 30 times</td><td>restarts the container after a minute; holds the other probes until it passes</td></tr>
+    <tr class="hl"><td>readinessProbe</td><td><code>/readyz</code> every 5 s</td><td>takes the pod out of the Service; does not restart it</td></tr>
+    <tr><td>livenessProbe</td><td><code>/livez</code> every 10 s</td><td>restarts the container</td></tr>
+  </table>
+  <div class="callout tip mt"><b>A slow start is not a dead process.</b> The startup probe gives the model time to load without loosening the liveness probe.</div>
+  <aside class="notes"><p>Values are those of the course's <code>k8s/farz.yaml</code>. Farz took 11 to 22 seconds from process start to ready on the course's laptop runs, mostly Python imports, which is why a minute of startup budget is safe. Ask: what would happen with a liveness probe on <code>/readyz</code> and no startup probe? A pod that loads slowly is killed before it is ever ready.</p></aside>
+</section>
+
+<section class="slide" id="requests-limits" data-lo="LO4">
+  <div class="kicker">Requests and limits</div>
+  <h2>Requests place the pod; limits stop it from taking the node</h2>
+  <div class="cols cols-2">
+    <pre class="code s" data-file="k8s/farz.yaml"><code class="language-yaml">resources:
+  requests: {cpu: 250m, memory: 256Mi}
+  limits:   {cpu: "1", memory: 512Mi}</code></pre>
+    <ul class="bullets small">
+      <li>The scheduler places a pod on a node with room for its <b>requests</b></li>
+      <li>Over its <b>CPU limit</b>, a container is slowed down</li>
+      <li>Over its <b>memory limit</b>, it is killed (<code>OOMKilled</code>) and restarted</li>
+    </ul>
   </div>
-  <div class="callout tip mt frag"><b>Takeaway.</b> REPLACE: the one sentence to remember</div>
-  <aside class="notes">Press once per step and say what each step adds before the next one appears. REPLACE: the example to walk through</aside>
+  <div class="callout warn mt"><b>What goes wrong.</b> No limits: one pod with a leak takes the node and its neighbours with it. Limits far below use: a restart loop under load.</div>
+  <aside class="notes"><p>Farz measured 184 MiB at ready in the course's run (lab 2.4 measures it), so 256Mi requested and 512Mi as a limit leave room. Day 3's sizing decides the CPU numbers from a load test rather than a guess.</p></aside>
+</section>
+
+<section class="slide" id="pod-events" data-lo="LO4">
+  <div class="kicker">Lab 2.3 · step 2</div>
+  <h2>A pod that does not start says why in its events</h2>
+  <table class="t small">
+    <tr><th>Status or event</th><th>Usual cause</th><th>Look at</th></tr>
+    <tr class="hl"><td>ErrImagePull, ImagePullBackOff</td><td>the node cannot fetch the image: wrong tag, or <code>latest</code> with <code>Always</code></td><td>the image name and the pull policy</td></tr>
+    <tr><td>CrashLoopBackOff</td><td>the process exits at start</td><td><code>kubectl logs --previous</code></td></tr>
+    <tr><td>Readiness probe failed</td><td>running, not ready: the model did not load</td><td>the body of <code>/readyz</code></td></tr>
+    <tr><td>OOMKilled</td><td>memory above the limit</td><td>the limit against a measurement</td></tr>
+  </table>
+  <aside class="notes"><p>The supplied manifest fails on the first row: <code>rifd/claims:latest</code> with <code>imagePullPolicy: Always</code> makes the node pull from Docker Hub, which does not have Rifd's image, although <code>kind load</code> put it on the node. <code>kubectl describe pod</code> shows the event at the bottom. Kubernetes also defaults to Always when the tag is <code>latest</code> or missing.</p></aside>
+</section>
+
+<section class="slide" id="rolling-update" data-lo="LO4">
+  <div class="kicker">Changing what runs</div>
+  <h2>A rolling update replaces pods one at a time, behind readiness</h2>
+  <div class="flow">
+    <div class="step c-navy"><b>1 · New pod</b>maxSurge 1: one extra pod with the new image</div>
+    <div class="arrow frag" data-frag="b">→</div>
+    <div class="step c-teal frag" data-frag="b"><b>2 · Ready?</b>it joins the Service only when <code>/readyz</code> passes</div>
+    <div class="arrow frag" data-frag="c">→</div>
+    <div class="step c-coral frag" data-frag="c"><b>3 · Old pod out</b>maxUnavailable 0: capacity never drops</div>
+  </div>
+  <div class="callout tip mt frag" data-frag="c"><b>Takeaway.</b> A version that never becomes ready never takes traffic: the rollout stops and the old pods keep serving.</div>
+  <aside class="notes"><p>Press once per step. This is the stretch of lab 2.3. Day 4 goes further: a rolling update moves all traffic within minutes, which is why a canary is used when the question is whether the new model is better, not only whether it starts.</p></aside>
+</section>
+
+<section class="slide" id="placement" data-lo="LO4">
+  <div class="kicker">Where may it run?</div>
+  <h2>The data each service holds decides where it may run</h2>
+  <div class="cols cols-2">
+    <ul class="bullets small">
+      <li>The national <b>Data Classification Policy</b> has four levels: Top Secret, Secret, Restricted, Public</li>
+      <li>Claims with names, national ids and health details: Rifd classifies them <b>Restricted</b> and keeps them on its in-Kingdom cluster</li>
+      <li>A copy abroad is a <b>transfer</b> under the Personal Data Protection Law and its transfer regulation</li>
+    </ul>
+    <div class="card c-amber tint"><h4>The lab's table</h4><p class="small mb0">Farz, Shabih and the dashboards: what each holds, its level, where it may run, and who signs. Bassam Al-Jaber signs with Munira Al-Ajmi.</p></div>
+  </div>
+  <aside class="notes"><p>The four levels are those of the national policy; that Rifd keeps Restricted data in the Kingdom is Rifd's own rule in the case study, not a quotation of the law. The dashboards are the interesting row: aggregate counts with no claim content can be classified lower, by a written decision, if the Day 3 redaction tests prove that nothing personal reaches them. Sources: Data Classification Policy; PDPL and the Regulation on Personal Data Transfer outside the Kingdom (SDAIA).</p></aside>
+</section>
+
+<section class="slide" id="check-cluster" data-lo="LO4">
+  <div class="kicker">Checkpoint</div>
+  <h2>Why is this pod not ready?</h2>
+  <div class="quiz" data-type="single" data-lo="LO4">
+    <p class="lead">A Farz pod shows Running with 0/1 ready. Its events repeat "Readiness probe failed: HTTP probe failed with statuscode: 503". The pod has never restarted. What is the most likely cause?</p>
+    <div class="opts">
+      <div class="opt" data-ok>The model did not load, so /readyz answers model-unavailable</div>
+      <div class="opt" data-why="An image problem stops the container before it runs; this pod is Running">The image tag cannot be pulled</div>
+      <div class="opt" data-why="A memory kill restarts the container; this pod has never restarted">The memory limit is too low</div>
+      <div class="opt" data-why="A failing liveness probe restarts the container; the restart count is zero">The liveness probe path is wrong</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> Running and never restarted rules out the image, memory and liveness; a 503 from the readiness check is the service saying it has no model.</div>
+  </div>
+  <aside class="notes"><p>Answer: A. Then ask what to run next: <code>kubectl port-forward</code> and <code>curl /readyz</code>, whose body names the reason, for example a wrong <code>RIFD_MODEL_DIR</code>.</p></aside>
 </section>
 
 <section class="slide lab" id="lab-2-3" data-auto="lab" data-lab="2.3">
-  <aside class="notes">REPLACE: what to watch for while participants work, the typical problems, and the fallback for anyone who did not finish an earlier lab</aside>
+  <aside class="notes"><p>AI policy: tutor. Usual problems: kind not finding the image because it was built under another name; forgetting to create the Secret, which shows as <code>CreateContainerConfigError</code>; indentation in YAML. Without a cluster the check reviews the manifest and the table, and says so. Remind everyone to delete the cluster at the end of the day. Solution: <code>labs/solutions/S2_3.py</code>.</p></aside>
 </section>
 
 <!-- Session 4 -->
 
 <section class="slide section" id="s4" data-auto="section" data-session="4"></section>
 
-<section class="slide" id="s4-idea" data-lo="LO3">
-  <div class="kicker">REPLACE: the question this slide answers</div>
-  <h2>REPLACE: one idea, stated as a sentence</h2>
-  <div class="cols cols-2">
-    <ul class="bullets">
-      <li>REPLACE: at most six bullets, each a complete thought</li>
-      <li>REPLACE: bold the key phrase; numbers come from the lab run, not from memory</li>
-    </ul>
-    <div class="card c-teal"><h4>In the case study</h4><p class="small mb0">REPLACE: tie the idea to the case study and its data</p></div>
+<section class="slide" id="meet-shabih" data-lo="LO3">
+  <div class="kicker">The second model</div>
+  <h2>Shabih turns a description into 96 numbers and finds the nearest past claims</h2>
+  <div class="flow">
+    <div class="step c-teal"><b>Description</b>"Windscreen cracked by a stone on the highway"</div>
+    <div class="arrow">→</div>
+    <div class="step c-cyan"><b>Encoder</b>character n-grams, then 96 dimensions, unit length</div>
+    <div class="arrow">→</div>
+    <div class="step c-purple"><b>Index</b>50,000 vectors in memory; dot product with each</div>
+    <div class="arrow">→</div>
+    <div class="step c-navy"><b>Answer</b>the k nearest: claim id, line, incident, score</div>
   </div>
-  <div class="callout warn mt"><b>What goes wrong.</b> REPLACE: the failure participants will hit, and how to recognise it</div>
-  <aside class="notes">REPLACE: what to say, the demo to run, the question to ask the room, the common failure and its fix</aside>
+  <aside class="notes"><p>Kholoud Al-Ghannam, a senior adjuster, uses Shabih to see how similar claims were settled. The encoder is a TF-IDF on character n-grams reduced by SVD, trained on the synthetic descriptions; it needs no model download and runs on any laptop. A pretrained sentence encoder would give better neighbours and the serving questions would be the same: memory, start-up, and what the answer may contain.</p></aside>
 </section>
 
-<section class="slide" id="s4-steps" data-lo="LO3">
-  <div class="kicker">Step by step</div>
-  <h2>REPLACE: a process, shown one step per key press</h2>
-  <div class="flow">
-    <div class="step c-teal"><b>1 · REPLACE: name</b>REPLACE: what happens first</div>
-    <div class="arrow frag" data-frag="b">→</div><div class="step c-cyan frag" data-frag="b"><b>2 · REPLACE: name</b>REPLACE: the next piece</div>
-    <div class="arrow frag" data-frag="c">→</div><div class="step c-coral frag" data-frag="c"><b>3 · REPLACE: name</b>REPLACE: the result</div>
+<section class="slide" id="index-in-memory" data-lo="LO3 LO4">
+  <div class="kicker">What it costs</div>
+  <h2>The index lives in memory, and loading it is the slow part</h2>
+  <div class="cols cols-3">
+    <div class="stat center"><div class="big">19 MB</div><div class="lbl">50,000 × 96 float32 numbers</div></div>
+    <div class="stat center"><div class="big">586 ms</div><div class="lbl">Shabih's model load, against 60 ms for Farz</div></div>
+    <div class="stat center"><div class="big">+40 MiB</div><div class="lbl">memory at ready, 223 against 184 MiB</div></div>
   </div>
-  <div class="callout tip mt frag"><b>Takeaway.</b> REPLACE: the one sentence to remember</div>
-  <aside class="notes">Press once per step and say what each step adds before the next one appears. REPLACE: the example to walk through</aside>
+  <p class="small mt">Searching every vector is fine at this size. Beyond a few million, an approximate index (HNSW, IVF) trades a little recall for much less time.</p>
+  <aside class="notes"><p>Measured in the course's run of lab 2.4 on a laptop. Time to ready was 18.7 s for Shabih and 21.9 s for Farz: mostly imports, and it varies from run to run, so read the load times for the difference between the models. The index size is arithmetic: 50,000 × 96 × 4 bytes.</p></aside>
+</section>
+
+<section class="slide" id="similar-contract" data-lo="LO3">
+  <div class="kicker">The contract</div>
+  <h2>/v1/similar returns claims, not people</h2>
+  <div class="cols cols-2">
+    <pre class="code s" data-file="POST /v1/similar"><code class="language-json">{"description": "Windscreen cracked by a stone",
+ "line": "motor", "k": 3}</code></pre>
+    <pre class="code s" data-file="200"><code class="language-json">{"results": [
+  {"claim_id": "CLM-…", "line": "motor",
+   "incident": "windscreen", "score": 0.9}, …],
+ "model": {"name": "shabih", "version": "1.0.0"}}</code></pre>
+  </div>
+  <div class="callout tip mt"><b>Minimise at the source.</b> The index keeps claim id, line and incident type only: no name, national id or description can leak through an answer it does not hold.</div>
+  <aside class="notes"><p>The example scores are illustrative; the tests check the shape and that no personal field appears. Same rules as Farz: unknown fields refused, <code>k</code> between 1 and 20, typed errors. Ask: an adjuster wants the description of each neighbour. Where should that come from? The claims system, with its own access control, by claim id.</p></aside>
+</section>
+
+<section class="slide" id="share-or-split" data-lo="LO3 LO4">
+  <div class="kicker">One deployment or two?</div>
+  <h2>Same image, separate deployments: the two models age differently</h2>
+  <table class="t small">
+    <tr><th></th><th>Farz</th><th>Shabih</th></tr>
+    <tr><td>Memory limit</td><td>512Mi</td><td>768Mi</td></tr>
+    <tr><td>Startup probe budget</td><td>2 s × 30</td><td>2 s × 60</td></tr>
+    <tr><td>Scales with</td><td>new claims</td><td>adjusters' searches</td></tr>
+    <tr class="hl"><td>Released when</td><td>the triage model changes</td><td>the encoder or the index changes</td></tr>
+  </table>
+  <aside class="notes"><p>Values from the course's <code>k8s/farz.yaml</code> and <code>k8s/shabih.yaml</code>. Serving both models from one pod would tie their releases, their limits and their scaling together; one image keeps the build simple. The startup budget for Shabih is generous here; the lab asks participants to set it from their own measurement.</p></aside>
+</section>
+
+<section class="slide" id="check-shabih" data-lo="LO3">
+  <div class="kicker">Checkpoint</div>
+  <h2>How should Shabih be deployed?</h2>
+  <div class="quiz" data-type="single" data-lo="LO3">
+    <p class="lead">Shabih needs about 40 MiB more memory than Farz and loads ten times slower. Searches peak in the afternoon, when adjusters work; new claims arrive all day. The team wants to put both models in one pod to save a deployment. What do you advise?</p>
+    <div class="opts">
+      <div class="opt" data-why="Saving one manifest ties two release cycles and two scaling patterns together">One pod with both models: fewer things to run</div>
+      <div class="opt" data-why="The difference is in limits, probes and scaling, which the image does not decide">Two images, because the models differ</div>
+      <div class="opt" data-ok>One image, two deployments, each with its own limits, startup probe and replica count</div>
+      <div class="opt" data-why="An afternoon peak calls for scaling Shabih, not for running it at all hours only from a batch">Run Shabih as a nightly batch instead of a service</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> Separate deployments let each model have the memory, start-up budget, scaling and release it needs, while one image keeps the build single.</div>
+  </div>
+  <aside class="notes"><p>Answer: C. If someone defends B, ask what would differ between the two images: nothing but the start command, which <code>RIFD_SERVICE</code> already chooses.</p></aside>
 </section>
 
 <section class="slide lab" id="lab-2-4" data-auto="lab" data-lab="2.4">
-  <aside class="notes">REPLACE: what to watch for while participants work, the typical problems, and the fallback for anyone who did not finish an earlier lab</aside>
+  <aside class="notes"><p>AI policy: tutor. Usual problems: returning the whole item including fields the schema forbids; running <code>measure.py</code> while another server holds the port (use <code>--port</code>); a first measurement inflated by a cold disk cache, so run each twice. Solution: <code>labs/solutions/S2_4.py</code>.</p></aside>
 </section>
 
-<section class="slide" id="wrap-up">
+<section class="slide" id="wrap-up" data-lo="LO4 LO3">
   <div class="kicker">Day 2 · wrap-up</div>
-  <h2>Three things to keep</h2>
+  <h2>Three things to keep from today</h2>
   <div class="cols cols-3">
-    <div class="card c-teal"><h4>Remember</h4><p class="small mb0">REPLACE: one idea participants keep</p></div>
-    <div class="card c-coral"><h4>Remember</h4><p class="small mb0">REPLACE: one idea participants keep</p></div>
-    <div class="card c-purple"><h4>Remember</h4><p class="small mb0">REPLACE: one idea participants keep</p></div>
+    <div class="card c-teal"><h4>Order layers by change</h4><p class="small mb0">Lock first, code last, two stages, a slim base and a non-root user.</p></div>
+    <div class="card c-cyan"><h4>Scan, fix, rescan, record</h4><p class="small mb0">Fix what is reachable and fixable; secrets come from the runtime and leaked ones are rotated.</p></div>
+    <div class="card c-coral"><h4>Probes and limits are the contract with the cluster</h4><p class="small mb0">Ready decides traffic, alive decides restarts, and the data decides where it runs.</p></div>
   </div>
+  <aside class="notes"><p>Ask each participant for one number from today that they did not expect. Tomorrow the service is observed and loaded: metrics, logs, traces, a load test and a sizing decision.</p></aside>
 </section>
 
-<section class="slide dark" id="next" data-label="Next">
+<section class="slide dark" id="next" data-lo="LO5 LO6">
   <div class="kicker">Next</div>
-  <h2>Day 3: Observe and size</h2>
-  <p class="lead">REPLACE: what participants prepare before then; unfinished labs can be finished at home</p>
-  <aside class="notes">REPLACE: accounts, installs or reading participants need before the next unit</aside>
+  <h2>Day 3: observe and size</h2>
+  <ul class="bullets">
+    <li>Metrics with percentiles, logs with no personal data, and a trace of one slow request</li>
+    <li>A load test at three rates against Munira's objective: 95th percentile under 150 ms at 200 requests a second</li>
+    <li>Workers, replicas and the cost of 1,000 predictions</li>
+  </ul>
+  <aside class="notes"><p>Day 3 needs no container runtime: every lab runs with uv on the laptop. Delete the kind cluster tonight to free the memory the load test will want.</p></aside>
 </section>

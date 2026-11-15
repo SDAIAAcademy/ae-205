@@ -1,7 +1,7 @@
 """Shabih, the similar-claims model: a text encoder and an index of past claims held in memory.
 
 An artefact folder holds:
-  model.skops     the encoder (character n-gram TF-IDF, then SVD to 64 dimensions, then unit length)
+  model.skops     the encoder (character n-gram TF-IDF, then SVD to 96 dimensions, then unit length)
   index.npy       one unit vector per past claim, float32
   items.json      claim id, line and incident type of each vector: no personal field, no free text
   metadata.json   name, version, sha256 of the two files

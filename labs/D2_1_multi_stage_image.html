@@ -1,37 +1,57 @@
 <article class="lab" data-lab="2.1">
   <div class="box goal">
     <h3>Goal</h3>
-    <p>REPLACE: by the end, participants can …</p>
+    <p>Package Farz and Shabih in one image that is small, built from the lock file, runs as a non-root user and rebuilds in seconds after a code change. Compare it with the naive container file the team wrote first.</p>
   </div>
 
   <h2>What you need</h2>
   <ul>
-    <li>REPLACE: the files, the tool and the account the lab uses</li>
+    <li>The lab folder <code>rifd-labs/2.1</code>, with <code>Dockerfile.naive</code> and no <code>Dockerfile</code> yet</li>
+    <li>A container runtime: Docker Desktop, Docker Engine or Podman (<code>podman build</code> takes the same file). Without one, write the file and let the check review it</li>
+    <li>AI policy: off for the first attempt at the container file. Write it yourself, then compare with an assistant's version if you want to.</li>
   </ul>
 
   <div class="step">
-    <h3>REPLACE: the first step <span class="min">15 min</span></h3>
-    <p>REPLACE: what to do and why, in two sentences</p>
-    <div class="prompt" data-tool="Container runtime and image builder">REPLACE: the prompt participants copy, with the parts they change in <span class="ph">colour</span></div>
+    <h3>Build the naive image; record size and time <span class="min">5 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">cd rifd-labs/2.1
+time docker build -f Dockerfile.naive -t rifd/claims:naive .
+docker image ls rifd/claims</code></pre>
+    <p>Write the size and the build time down. Then change one line in <code>src/rifd/app.py</code> (a comment is enough), build again and watch which steps run.</p>
   </div>
 
   <div class="step">
-    <h3>REPLACE: the second step <span class="min">10 min</span></h3>
-    <p>REPLACE: what to do and why, in two sentences</p>
+    <h3>Write the multi-stage file without AI help <span class="min">10 min</span></h3>
+    <p>Write <code>Dockerfile</code> with two stages. The build stage starts from <code>python:3.12-slim</code>, copies <code>uv</code> from <code>ghcr.io/astral-sh/uv:0.13.5</code>, copies <code>pyproject.toml</code> and <code>uv.lock</code> before the code and runs <code>uv sync --frozen --no-dev</code>. The runtime stage starts again from the slim base, copies only the virtual environment, the code and the models, and switches to a user with id 10001. Write <code>.dockerignore</code> so that <code>.venv</code>, <code>tests</code>, <code>notebook</code> and <code>secrets</code> never reach the build.</p>
+  </div>
+
+  <div class="step">
+    <h3>Build it; record size, time and a rebuild after a code change <span class="min">6 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">time docker build -t rifd/claims:1.0.0 .
+docker image ls rifd/claims
+docker run --rm -p 8000:8000 rifd/claims:1.0.0   # then: curl localhost:8000/readyz</code></pre>
+    <p>Change the same line again and rebuild: only the layers after <code>COPY src</code> should run.</p>
+  </div>
+
+  <div class="step">
+    <h3>Check <span class="min">4 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run ../lab.py check 2.1</code></pre>
   </div>
 
   <div class="step stretch">
     <h3>✱ Stretch</h3>
-    <p>REPLACE: an extension for those who finish early</p>
+    <p>Pin the base image by digest and rebuild twice: do the two images have the same id?</p>
   </div>
 
   <h2>Check yourself</h2>
   <ol class="checks">
-    <li>REPLACE: a question that shows the lab worked</li>
+    <li>Which line of your file decides whether a code change reinstalls the dependencies?</li>
+    <li>What does the runtime stage leave behind that the naive image carries?</li>
+    <li>Why does <code>secrets</code> belong in <code>.dockerignore</code> even though no line copies it by name?</li>
   </ol>
 
   <details class="instructor">
     <summary>For the trainer</summary>
-    <p>REPLACE: the answer key, the traps and the common errors</p>
+    <p>The check reviews the file for two stages, pinned bases, an install from the lock without development tools, a <code>USER</code> line, no <code>COPY .</code> in the runtime stage and no secret in <code>ENV</code> or <code>ARG</code>; with a runtime it also asks that <code>rifd/claims:1.0.0</code> is under 500 MB. On the naive file it reports four findings: no install from the lock, development tools in the image, root, and <code>COPY .</code>.</p>
+    <p>The course's run had no container daemon, so the image sizes and build times were not measured for this page: have a trainer build both images on the room's machines before the course and put the numbers on the lab slide. Expect the naive image to be several times larger, mostly the full Debian base and the development dependencies. Answers: the <code>COPY pyproject.toml uv.lock</code> line before <code>COPY src</code>; build tools, caches, tests, the notebook and the dev group; a later <code>COPY .</code> would sweep the folder in. Solution: <code>labs/solutions/S2_1.py</code>.</p>
   </details>
 </article>

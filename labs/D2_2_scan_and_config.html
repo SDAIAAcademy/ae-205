@@ -1,37 +1,66 @@
 <article class="lab" data-lab="2.2">
   <div class="box goal">
     <h3>Goal</h3>
-    <p>REPLACE: by the end, participants can …</p>
+    <p>Scan the image the claims team was given last quarter, fix its critical finding by moving to a fixed version, and take the lookup key out of the code and the image so that the runtime supplies it.</p>
   </div>
 
   <h2>What you need</h2>
   <ul>
-    <li>REPLACE: the files, the tool and the account the lab uses</li>
+    <li>The lab folder <code>rifd-labs/2.2</code>: <code>supplied/Dockerfile</code>, a lock file with an old <code>h11</code>, and a key written in <code>src/rifd/settings.py</code></li>
+    <li>A scanner: <code>pip-audit</code> (in the project's dev tools) scans the Python dependencies; Trivy or Grype also scan the image's system packages when a container runtime is available</li>
+    <li>AI policy: tutor.</li>
   </ul>
 
   <div class="step">
-    <h3>REPLACE: the first step <span class="min">15 min</span></h3>
-    <p>REPLACE: what to do and why, in two sentences</p>
-    <div class="prompt" data-tool="Container runtime and image builder">REPLACE: the prompt participants copy, with the parts they change in <span class="ph">colour</span></div>
+    <h3>Scan the supplied image and read the report <span class="min">6 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">cd rifd-labs/2.2
+uv export --no-dev --no-hashes --frozen -o runs/requirements-audit.txt
+uv run pip-audit -r runs/requirements-audit.txt --no-deps --disable-pip --aliases --desc
+# with a runtime: docker build -f supplied/Dockerfile -t rifd/claims:supplied .
+#                 trivy image rifd/claims:supplied</code></pre>
+    <p>For each finding, note the package, the advisory, its severity and the version that fixes it. Open the advisory and read which requests trigger it.</p>
   </div>
 
   <div class="step">
-    <h3>REPLACE: the second step <span class="min">10 min</span></h3>
-    <p>REPLACE: what to do and why, in two sentences</p>
+    <h3>Fix the critical finding and scan again <span class="min">7 min</span></h3>
+    <p>In <code>pyproject.toml</code>, replace the pin on <code>h11</code> with a lower bound at the fixed version, then lock and scan again.</p>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv lock --upgrade-package h11
+uv export --no-dev --no-hashes --frozen -o runs/requirements-audit.txt
+uv run pip-audit -r runs/requirements-audit.txt --no-deps --disable-pip</code></pre>
+  </div>
+
+  <div class="step">
+    <h3>Find the key in the image history <span class="min">4 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">grep -rn "rifd-lookup-key" src supplied
+# with a runtime: docker history --no-trunc rifd/claims:supplied | grep KEY</code></pre>
+    <p>Anyone who can pull the image can read it. Removing the line from a new image does not remove it from the old one, so the key is rotated as well.</p>
+  </div>
+
+  <div class="step">
+    <h3>Read the key from configuration instead <span class="min">5 min</span></h3>
+    <p>In <code>src/rifd/settings.py</code>, make <code>lookup_key</code> come from <code>_secret("RIFD_LOOKUP_KEY")</code>, which reads the environment or the file <code>secrets/lookup.key</code>. Take the key out of <code>supplied/Dockerfile</code> and put it in <code>secrets/lookup.key</code>, which git and the build both ignore.</p>
+  </div>
+
+  <div class="step">
+    <h3>Check <span class="min">3 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run ../lab.py check 2.2</code></pre>
   </div>
 
   <div class="step stretch">
     <h3>✱ Stretch</h3>
-    <p>REPLACE: an extension for those who finish early</p>
+    <p>Scan the multi-stage image of lab 2.1 and compare the counts by severity.</p>
   </div>
 
   <h2>Check yourself</h2>
   <ol class="checks">
-    <li>REPLACE: a question that shows the lab worked</li>
+    <li>Two findings: one critical with a fixed version, one medium with none. Which do you fix today, and what do you record about the other?</li>
+    <li>Why is a lower bound (<code>h11&gt;=0.16</code>) in <code>pyproject.toml</code> and an exact version in <code>uv.lock</code> the right pair?</li>
+    <li>The key was in an image that was pushed. What must happen besides removing it?</li>
   </ol>
 
   <details class="instructor">
     <summary>For the trainer</summary>
-    <p>REPLACE: the answer key, the traps and the common errors</p>
+    <p>In the course's run (15 November 2026) pip-audit 2.10.1 reported "2 known vulnerabilities in 1 package": the same advisory for <code>h11 0.14.0</code>, PYSEC-2026-348, printed twice, with the aliases GHSA-vqfr-h8mv-ghfj and CVE-2025-43859, rated critical by GitHub. It is a request-smuggling flaw in how h11 parses the line endings of chunked bodies, fixed in 0.16.0. Point out that the count is not the number of distinct flaws. After the fix the lock held h11 0.16.0 and pip-audit found none. Advisory databases change: run the scan the week before the course and update the counts on the lab slide.</p>
+    <p>The course's run did not build or scan the image itself (no container daemon), so Trivy's system-package findings were not seen; the Python findings are the ones the check depends on. Answers: fix the critical one and record the medium one with its advisory and a date to look again; the bound says what the project accepts, the lock says what was tested; rotate the key, because every copy of the old image still holds it. Solution: <code>labs/solutions/S2_2.py</code>.</p>
   </details>
 </article>
