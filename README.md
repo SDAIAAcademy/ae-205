@@ -5,7 +5,7 @@
 
 AI Engineering Track · SDAIA Academy · AE-205 · Level 200
 
-REPLACE: one line under the title: what participants can do after the course
+Take a trained model from a notebook to a versioned, containerised, monitored service, size it against a latency objective, and release and roll it back on evidence
 
 Participants take two trained models from a notebook to a monitored service. For a fictional mutual insurer they package a claims-triage classifier and a similar-claims embedding model with pinned dependencies, register model versions, serve them behind a versioned API with input validation, build and scan a container image, run it on a single-node local cluster with health checks, add metrics, structured logs and traces, load-test and size the service, release a new version by canary and roll it back, and detect drift in a replayed stream of claims.
 
@@ -35,7 +35,7 @@ Participants take two trained models from a notebook to a monitored service. For
 | Day 2 | Containers and a cluster | Images that are small and reproducible; Scanning and configuration; Running on a local cluster; Serving the embedding model | [`slides/day2.html`](slides/day2.html) |
 | Day 3 | Observe and size | Metrics that matter; Logs and traces; Load testing; Sizing and cost | [`slides/day3.html`](slides/day3.html) |
 | Day 4 | Release and watch | Rolling, canary and shadow releases; Rollback on evidence; Drift in replayed traffic; Alerts and a runbook | [`slides/day4.html`](slides/day4.html) |
-| Capstone | Capstone project presentations |  | [`slides/capstone.html`](slides/capstone.html) |
+| Capstone | Capstone: a monitored service and its defence |  | [`slides/capstone.html`](slides/capstone.html) |
 <!-- /academy:units -->
 
 ## Case study
@@ -49,22 +49,22 @@ Every lab is a page in `labs/`, opened from the course page and from the lab sli
 
 | | Session | Lab | File |
 |---|---|---|---|
-| 1.1 | Day 1 · Session 1 | Export the claims-triage model with its signature and pinned dependencies and reload it in a clean environment | [`D1_1_export_claims_triage.html`](labs/D1_1_export_claims_triage.html) |
-| 1.2 | Day 1 · Session 2 | Register two supplied model versions with metrics and tags and load one by version | [`D1_2_register_two_supplied.html`](labs/D1_2_register_two_supplied.html) |
-| 1.3 | Day 1 · Session 3 | Build a versioned prediction endpoint that validates inputs and returns typed errors | [`D1_3_build_versioned_prediction.html`](labs/D1_3_build_versioned_prediction.html) |
-| 1.4 | Day 1 · Session 4 | Add health and readiness checks and show how they differ when the model file is missing | [`D1_4_add_health_readiness.html`](labs/D1_4_add_health_readiness.html) |
-| 2.1 | Day 2 · Session 1 | Write a multi-stage container file and compare its size and build time with a naive one | [`D2_1_write_multi_stage.html`](labs/D2_1_write_multi_stage.html) |
-| 2.2 | Day 2 · Session 2 | Scan a supplied image, fix one critical finding and move secrets out of the image into configuration | [`D2_2_scan_supplied_image.html`](labs/D2_2_scan_supplied_image.html) |
-| 2.3 | Day 2 · Session 3 | Deploy the supplied service image to a single-node cluster with probes and resource limits | [`D2_3_deploy_supplied_service.html`](labs/D2_3_deploy_supplied_service.html) |
-| 2.4 | Day 2 · Session 4 | Add the similar-claims endpoint and compare its memory use and start-up time with the classifier | [`D2_4_add_similar_claims.html`](labs/D2_4_add_similar_claims.html) |
-| 3.1 | Day 3 · Session 1 | Expose request rate, error rate and latency histograms and graph the 50th, 95th and 99th percentiles | [`D3_1_expose_request_rate.html`](labs/D3_1_expose_request_rate.html) |
-| 3.2 | Day 3 · Session 2 | Add structured logs with a request id, redact personal fields and follow one slow request through a trace | [`D3_2_add_structured_logs.html`](labs/D3_2_add_structured_logs.html) |
-| 3.3 | Day 3 · Session 3 | Run a load test at three request rates and find where latency breaks the objective | [`D3_3_run_load_test.html`](labs/D3_3_run_load_test.html) |
-| 3.4 | Day 3 · Session 4 | Tune workers and replicas to meet the latency objective and compute cost per 1,000 predictions | [`D3_4_tune_workers_replicas.html`](labs/D3_4_tune_workers_replicas.html) |
-| 4.1 | Day 4 · Session 1 | Send 10% of traffic to a new version and compare its metrics with the current one | [`D4_1_send_10_traffic.html`](labs/D4_1_send_10_traffic.html) |
-| 4.2 | Day 4 · Session 2 | Trigger the rollback criteria with a seeded faulty version and roll back within five minutes | [`D4_2_trigger_rollback_criteria.html`](labs/D4_2_trigger_rollback_criteria.html) |
-| 4.3 | Day 4 · Session 3 | Replay four weeks of claims, compute a drift statistic per feature and name the shifted ones | [`D4_3_replay_four_weeks.html`](labs/D4_3_replay_four_weeks.html) |
-| 4.4 | Day 4 · Session 4 | Write two alert rules and a one-page runbook for the on-call engineer, then choose the capstone model | [`D4_4_write_two_alert.html`](labs/D4_4_write_two_alert.html) |
+| 1.1 | Day 1 · Session 1 | Export Farz as an artefact | [`D1_1_export_artefact.html`](labs/D1_1_export_artefact.html) |
+| 1.2 | Day 1 · Session 2 | Register two versions | [`D1_2_registry.html`](labs/D1_2_registry.html) |
+| 1.3 | Day 1 · Session 3 | A versioned endpoint with a contract | [`D1_3_prediction_api.html`](labs/D1_3_prediction_api.html) |
+| 1.4 | Day 1 · Session 4 | Health and readiness checks | [`D1_4_health_readiness.html`](labs/D1_4_health_readiness.html) |
+| 2.1 | Day 2 · Session 1 | A multi-stage container file | [`D2_1_multi_stage_image.html`](labs/D2_1_multi_stage_image.html) |
+| 2.2 | Day 2 · Session 2 | Scan, fix, configure | [`D2_2_scan_and_config.html`](labs/D2_2_scan_and_config.html) |
+| 2.3 | Day 2 · Session 3 | Deploy to a local cluster | [`D2_3_local_cluster.html`](labs/D2_3_local_cluster.html) |
+| 2.4 | Day 2 · Session 4 | The similar-claims endpoint | [`D2_4_similar_claims.html`](labs/D2_4_similar_claims.html) |
+| 3.1 | Day 3 · Session 1 | Rate, errors and latency | [`D3_1_metrics.html`](labs/D3_1_metrics.html) |
+| 3.2 | Day 3 · Session 2 | Logs, redaction and a trace | [`D3_2_logs_traces.html`](labs/D3_2_logs_traces.html) |
+| 3.3 | Day 3 · Session 3 | Three rates against the objective | [`D3_3_load_test.html`](labs/D3_3_load_test.html) |
+| 3.4 | Day 3 · Session 4 | Workers, replicas and cost | [`D3_4_sizing_cost.html`](labs/D3_4_sizing_cost.html) |
+| 4.1 | Day 4 · Session 1 | A 10% canary | [`D4_1_canary.html`](labs/D4_1_canary.html) |
+| 4.2 | Day 4 · Session 2 | Roll back a faulty version | [`D4_2_rollback.html`](labs/D4_2_rollback.html) |
+| 4.3 | Day 4 · Session 3 | Drift in four weeks | [`D4_3_drift.html`](labs/D4_3_drift.html) |
+| 4.4 | Day 4 · Session 4 | Two alerts and a runbook | [`D4_4_alerts_runbook.html`](labs/D4_4_alerts_runbook.html) |
 <!-- /academy:labs -->
 
 ## Capstone
@@ -99,7 +99,70 @@ Each line is a capability; the examples are interchangeable.
 <!-- academy:sources -->
 ## Sources
 
-- REPLACE: every source the course cites, with its address, in course.json under "sources"; this list is written from there
+### Containers and clusters
+
+- [Docker Docs: Multi-stage builds](https://docs.docker.com/build/building/multi-stage/)
+- [Docker Docs: Building best practices](https://docs.docker.com/build/building/best-practices/)
+- [uv: Using uv in Docker](https://docs.astral.sh/uv/guides/integration/docker/)
+- [uv: Locking and syncing](https://docs.astral.sh/uv/concepts/projects/sync/)
+- [Podman: Getting started](https://podman.io/docs)
+- [Kubernetes: Liveness, readiness and startup probes](https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/)
+- [Kubernetes: Configure liveness, readiness and startup probes](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/)
+- [Kubernetes: Resource management for pods and containers](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/)
+- [Kubernetes: Deployments](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+- [Kubernetes: Secrets](https://kubernetes.io/docs/concepts/configuration/secret/)
+- [kind: Quick start](https://kind.sigs.k8s.io/docs/user/quick-start/)
+- [k3d (repository)](https://github.com/k3d-io/k3d)
+- [minikube start](https://minikube.sigs.k8s.io/docs/start/)
+- [The Twelve-Factor App: Config](https://12factor.net/config)
+
+### Scanning
+
+- [Trivy documentation](https://trivy.dev/latest/docs/)
+- [Grype (repository)](https://github.com/anchore/grype)
+- [pip-audit (repository)](https://github.com/pypa/pip-audit)
+- [OSV: Open Source Vulnerabilities](https://osv.dev/)
+
+### Artefacts, registries and serving
+
+- [Python: pickle (the security warning)](https://docs.python.org/3/library/pickle.html)
+- [skops: Secure persistence](https://skops.readthedocs.io/en/stable/persistence.html)
+- [MLflow: Model registry](https://mlflow.org/docs/latest/ml/model-registry/)
+- [MLflow: Model signatures and input examples](https://mlflow.org/docs/latest/ml/model/signatures/)
+- [FastAPI: Handling errors](https://fastapi.tiangolo.com/tutorial/handling-errors/)
+- [FastAPI: Testing dependencies with overrides](https://fastapi.tiangolo.com/advanced/testing-dependencies/)
+- [FastAPI in containers](https://fastapi.tiangolo.com/deployment/docker/)
+- [Uvicorn: Deployment](https://uvicorn.dev/deployment/)
+- [Pydantic: Models](https://docs.pydantic.dev/latest/concepts/models/)
+- [RFC 9457: Problem Details for HTTP APIs](https://www.rfc-editor.org/rfc/rfc9457.html)
+- [Ray Serve](https://docs.ray.io/en/latest/serve/index.html)
+- [KServe](https://kserve.github.io/website/)
+
+### Observability, load and releases
+
+- [Prometheus: Histograms and summaries](https://prometheus.io/docs/practices/histograms/)
+- [Prometheus: Query functions](https://prometheus.io/docs/prometheus/latest/querying/functions/)
+- [Prometheus: Alerting rules](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/)
+- [Prometheus Python client](https://prometheus.github.io/client_python/)
+- [Grafana: Dashboard JSON model](https://grafana.com/docs/grafana/latest/dashboards/build-dashboards/view-dashboard-json-model/)
+- [OpenTelemetry: Python](https://opentelemetry.io/docs/languages/python/)
+- [OpenTelemetry: Traces](https://opentelemetry.io/docs/concepts/signals/traces/)
+- [structlog documentation](https://www.structlog.org/en/stable/)
+- [Locust documentation](https://docs.locust.io/en/stable/)
+- [Grafana k6 documentation](https://grafana.com/docs/k6/latest/)
+- [Google SRE book: Monitoring distributed systems](https://sre.google/sre-book/monitoring-distributed-systems/)
+- [Google SRE workbook: Canarying releases](https://sre.google/workbook/canarying-releases/)
+- [Google SRE workbook: Alerting on SLOs](https://sre.google/workbook/alerting-on-slos/)
+- [SciPy: ks_2samp](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ks_2samp.html)
+- [Evidently documentation](https://docs.evidentlyai.com/)
+
+### National references
+
+- [Personal Data Protection Law (SDAIA)](https://sdaia.gov.sa/en/SDAIA/about/Documents/PersonalDataProtectionLaw.pdf)
+- [Regulation on Personal Data Transfer outside the Kingdom (SDAIA)](https://sdaia.gov.sa/Documents/RegulationonPersonalDataEN.pdf)
+- [Data Classification Policy (NDMO, SDAIA)](https://sdaia.gov.sa/en/SDAIA/about/Documents/DataClassificationPolicy.pdf)
+- [AI Ethics Principles (SDAIA)](https://sdaia.gov.sa/en/SDAIA/about/Documents/ai-principles.pdf)
+- [National Cybersecurity Authority: controls list (Cloud Cybersecurity Controls)](https://nca.gov.sa/en/regulatory-documents/controls-list/)
 <!-- /academy:sources -->
 
 ### National references
