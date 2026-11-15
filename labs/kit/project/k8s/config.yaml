@@ -1,0 +1,10 @@
+# Settings that are not secret. The lookup key is a Secret, created from the command line:
+#   kubectl create secret generic rifd-lookup --from-literal=key=<the key you were given>
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rifd-config
+  labels: {app.kubernetes.io/part-of: rifd-claims}
+data:
+  RIFD_LOOKUP_MS: "120"
+  RIFD_RELEASE: "farz-1.0.0"

@@ -1,0 +1,7 @@
+# The first container file someone wrote for Farz. It works. Lab 2.1 asks what it costs.
+FROM python:3.12
+WORKDIR /app
+COPY . .
+RUN pip install uv && uv sync
+ENV RIFD_MODEL_DIR=/app/models/farz-1.0.0
+CMD ["uv", "run", "uvicorn", "rifd.app:app", "--host", "0.0.0.0", "--port", "8000"]

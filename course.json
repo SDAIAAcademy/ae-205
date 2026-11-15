@@ -1076,6 +1076,10 @@
           "url": "https://sdaia.gov.sa/en/SDAIA/about/Documents/PersonalDataProtectionLaw.pdf"
         },
         {
+          "title": "Implementing Regulation of the Personal Data Protection Law (SDAIA)",
+          "url": "https://sdaia.gov.sa/en/SDAIA/about/Documents/ImplementingRegulationPersonalDataProtectionLaw.pdf"
+        },
+        {
           "title": "Regulation on Personal Data Transfer outside the Kingdom (SDAIA)",
           "url": "https://sdaia.gov.sa/Documents/RegulationonPersonalDataEN.pdf"
         },
@@ -1088,8 +1092,8 @@
           "url": "https://sdaia.gov.sa/en/SDAIA/about/Documents/ai-principles.pdf"
         },
         {
-          "title": "National Cybersecurity Authority: controls list (Cloud Cybersecurity Controls)",
-          "url": "https://nca.gov.sa/en/regulatory-documents/controls-list/"
+          "title": "National Cybersecurity Authority: Cloud Cybersecurity Controls",
+          "url": "https://nca.gov.sa/en/regulatory-documents/controls-list/ccc/"
         }
       ]
     }

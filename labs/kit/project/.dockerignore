@@ -1,0 +1,15 @@
+# What the build never needs to see
+.venv
+.git
+**/__pycache__
+.pytest-tmp
+tests
+notebook
+artefacts
+registry
+runs
+*.log
+*.jsonl
+.env
+.env.*
+secrets

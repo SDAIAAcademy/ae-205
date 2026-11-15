@@ -1,37 +1,64 @@
 <article class="lab" data-lab="1.4">
   <div class="box goal">
     <h3>Goal</h3>
-    <p>REPLACE: by the end, participants can …</p>
+    <p>Give Farz two checks that answer two questions: is the process alive, and should traffic come here now. Load and warm the model before the first request, and show what each check says when the model file is missing.</p>
   </div>
 
   <h2>What you need</h2>
   <ul>
-    <li>REPLACE: the files, the tool and the account the lab uses</li>
+    <li>The lab folder <code>rifd-labs/1.4</code>: a service with one <code>/health</code> that always says OK and a model loaded on the first request</li>
+    <li>The tests <code>tests/test_health.py</code></li>
+    <li>AI policy: tutor.</li>
   </ul>
 
   <div class="step">
-    <h3>REPLACE: the first step <span class="min">15 min</span></h3>
-    <p>REPLACE: what to do and why, in two sentences</p>
-    <div class="prompt" data-tool="Container runtime and image builder">REPLACE: the prompt participants copy, with the parts they change in <span class="ph">colour</span></div>
+    <h3>See the old health check say OK with no model <span class="min">4 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">cd rifd-labs/1.4
+RIFD_MODEL_DIR=models/missing uv run uvicorn rifd.app:app --port 8000 &amp;
+curl -s localhost:8000/health
+curl -s -X POST localhost:8000/v1/triage -H "content-type: application/json" -d @examples/motor.json</code></pre>
+    <p>A cluster that trusts <code>/health</code> sends this pod traffic, and every claim fails. Stop the server.</p>
   </div>
 
   <div class="step">
-    <h3>REPLACE: the second step <span class="min">10 min</span></h3>
-    <p>REPLACE: what to do and why, in two sentences</p>
+    <h3>Load and warm the model in the lifespan <span class="min">7 min</span></h3>
+    <p>In <code>src/rifd/app.py</code>, call <code>load_farz(app)</code> in the lifespan where the TODO is, and take the lazy loading out of the route. <code>load_farz</code> verifies the sha256, makes one warm-up prediction on the artefact's first reference claim and records how long loading and warming took.</p>
+  </div>
+
+  <div class="step">
+    <h3>Write /livez and /readyz <span class="min">6 min</span></h3>
+    <p>Replace <code>/health</code> with <code>/livez</code>, which answers while the process runs and never looks at the model, and <code>/readyz</code>, which answers 200 with the model's name, version, load and warm-up times only when <code>app.state.ready</code> is true, and otherwise a <code>model-unavailable</code> problem with the reason.</p>
+  </div>
+
+  <div class="step">
+    <h3>Test both with the model file missing <span class="min">6 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">RIFD_MODEL_DIR=models/missing uv run uvicorn rifd.app:app --port 8000 &amp;
+curl -si localhost:8000/livez | head -1
+curl -si localhost:8000/readyz
+kill %1
+uv run pytest tests/test_health.py</code></pre>
+  </div>
+
+  <div class="step">
+    <h3>Check <span class="min">2 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run ../lab.py check 1.4</code></pre>
   </div>
 
   <div class="step stretch">
     <h3>✱ Stretch</h3>
-    <p>REPLACE: an extension for those who finish early</p>
+    <p>Make <code>/readyz</code> fail when the warm-up prediction disagrees with the artefact's reference prediction, then append a byte to a copy of <code>model.skops</code> and see which check catches it first.</p>
   </div>
 
   <h2>Check yourself</h2>
   <ol class="checks">
-    <li>REPLACE: a question that shows the lab worked</li>
+    <li>The model file is missing. What should the cluster do with this pod: restart it, or stop sending it traffic?</li>
+    <li>Why must <code>/livez</code> never depend on the model?</li>
+    <li>What does the first caller pay for when the model loads lazily?</li>
   </ol>
 
   <details class="instructor">
     <summary>For the trainer</summary>
-    <p>REPLACE: the answer key, the traps and the common errors</p>
+    <p>Expected with the model missing: <code>/livez</code> 200, <code>/readyz</code> 503 with <code>urn:rifd:problem:model-unavailable</code> and "no artefact at models/missing", and predictions refused with the same type. In the course's run the finished service reported a load of 64 ms and a warm-up of 97 ms on a laptop; the warm-up is the cost the first caller paid before.</p>
+    <p>On the first question: stop the traffic, do not restart. Restarting a pod whose model file is missing restarts it forever; a liveness check that looks at the model turns a bad deployment into a restart loop. Solution: <code>labs/solutions/S1_4.py</code>.</p>
   </details>
 </article>

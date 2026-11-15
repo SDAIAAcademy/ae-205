@@ -1,0 +1,21 @@
+# Alert rules for Farz, in Prometheus' rule format. Test them without Prometheus:
+#   uv run python tools/promlite.py rules --series ../data/recordings/spike.jsonl --rules monitoring/alerts.yml
+groups:
+  - name: farz
+    rules:
+      - alert: FarzErrorRatioHigh
+        expr: sum(rate(rifd_requests_total{route="/v1/triage",status=~"5.."}[1m])) / sum(rate(rifd_requests_total{route="/v1/triage"}[1m])) > 0.01
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: More than 1% of triage requests fail with a server error
+          runbook_url: RUNBOOK.md#errors
+      - alert: FarzLatencyP95High
+        expr: histogram_quantile(0.95, sum by (le) (rate(rifd_request_duration_seconds_bucket{route="/v1/triage"}[5m]))) > 0.15
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: The 95th-percentile triage latency is above the 150 ms objective
+          runbook_url: RUNBOOK.md#latency

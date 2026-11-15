@@ -40,7 +40,7 @@ Participants take two trained models from a notebook to a monitored service. For
 
 ## Case study
 
-**REPLACE: the name of the fictional organisation every lab works on.** REPLACE: two sentences on the case study and its synthetic data
+**Rifd Mutual Insurance.** A fictional cooperative insurer whose claims team wants two notebook models in service: Farz, which triages each new motor, health or property claim into fast track, standard or investigate, and Shabih, which finds similar past claims for an adjuster. Every lab works on 50,000 synthetic claims from a seeded generator, the models the lab kit trains on a laptop processor, and four weeks of replayed claims with drift injected from the third week. The people (Munira Al-Ajmi, head of claims operations; Adel Al-Shaikh, data scientist; Ghaida Al-Ruqi, on-call engineer; Bassam Al-Jaber, data protection officer; Kholoud Al-Ghannam, senior adjuster) and every name, national id and mobile number in the data are invented.
 
 <!-- academy:labs -->
 ## Labs
@@ -71,7 +71,11 @@ Every lab is a page in `labs/`, opened from the course page and from the lab sli
 
 A model of the participant's choice taken to a monitored service, submitted as a public repository with container file, deployment manifests and dashboards as code, and a README reporting load-test results against a latency objective, a recorded canary release and rollback and a drift check, followed by an eight-minute defence and four minutes of questions
 
-**Submission:** REPLACE: what participants submit and how: a public repository link, or a shared folder for a course without code
+**Submission:** a public GitHub repository link: the service with its container file, deployment manifests, dashboard and alert rules as code, and a README that reports the load-test results against a stated latency objective, the recorded canary release and rollback, and a drift check, with the command that produced each number.
+
+**Follow-up task:** run the capstone service for one week of replayed traffic and write a short incident note on what the dashboard and alerts showed.
+
+**Assessment:** a supervised entry quiz and exit check without AI assistance (read a container file and a manifest, interpret a latency histogram, choose a release strategy; 20%), the capstone repository on the five-criterion rubric (60%), and a live defence in which the participant rolls back a version and explains a dashboard the assessor selects, while the assessor injects a fault to diagnose (20%). Passing: 70% overall, with at least 60% on the rubric and at least 60% on the supervised check.
 
 ## Prerequisites
 
@@ -159,16 +163,17 @@ Each line is a capability; the examples are interchangeable.
 ### National references
 
 - [Personal Data Protection Law (SDAIA)](https://sdaia.gov.sa/en/SDAIA/about/Documents/PersonalDataProtectionLaw.pdf)
+- [Implementing Regulation of the Personal Data Protection Law (SDAIA)](https://sdaia.gov.sa/en/SDAIA/about/Documents/ImplementingRegulationPersonalDataProtectionLaw.pdf)
 - [Regulation on Personal Data Transfer outside the Kingdom (SDAIA)](https://sdaia.gov.sa/Documents/RegulationonPersonalDataEN.pdf)
 - [Data Classification Policy (NDMO, SDAIA)](https://sdaia.gov.sa/en/SDAIA/about/Documents/DataClassificationPolicy.pdf)
 - [AI Ethics Principles (SDAIA)](https://sdaia.gov.sa/en/SDAIA/about/Documents/ai-principles.pdf)
-- [National Cybersecurity Authority: controls list (Cloud Cybersecurity Controls)](https://nca.gov.sa/en/regulatory-documents/controls-list/)
+- [National Cybersecurity Authority: Cloud Cybersecurity Controls](https://nca.gov.sa/en/regulatory-documents/controls-list/ccc/)
 <!-- /academy:sources -->
 
 ### National references
 
-- Personal Data Protection Law and its implementing regulations: REPLACE: the address of the official text
-- Regulation on Personal Data Transfer outside the Kingdom: REPLACE: the address of the official text
-- NDMO Data Classification Policy: REPLACE: the address of the official text
-- National Cybersecurity Authority (NCA) Cloud Cybersecurity Controls: REPLACE: the address of the official text
-- SDAIA AI Ethics Principles: REPLACE: the address of the official text
+- Personal Data Protection Law and its implementing regulations: https://sdaia.gov.sa/en/SDAIA/about/Documents/PersonalDataProtectionLaw.pdf and https://sdaia.gov.sa/en/SDAIA/about/Documents/ImplementingRegulationPersonalDataProtectionLaw.pdf
+- Regulation on Personal Data Transfer outside the Kingdom: https://sdaia.gov.sa/Documents/RegulationonPersonalDataEN.pdf
+- NDMO Data Classification Policy: https://sdaia.gov.sa/en/SDAIA/about/Documents/DataClassificationPolicy.pdf
+- National Cybersecurity Authority (NCA) Cloud Cybersecurity Controls: https://nca.gov.sa/en/regulatory-documents/controls-list/ccc/
+- SDAIA AI Ethics Principles: https://sdaia.gov.sa/en/SDAIA/about/Documents/ai-principles.pdf

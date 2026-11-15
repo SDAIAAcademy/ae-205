@@ -1,0 +1,31 @@
+{
+  "title": "Farz: claims triage",
+  "uid": "farz-triage",
+  "schemaVersion": 39,
+  "time": {"from": "now-30m", "to": "now"},
+  "refresh": "10s",
+  "panels": [
+    {"id": 1, "type": "timeseries", "title": "Latency percentiles (seconds)", "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+     "datasource": {"type": "prometheus", "uid": "prometheus"},
+     "targets": [
+       {"refId": "A", "legendFormat": "p50", "expr": "histogram_quantile(0.5, sum by (le) (rate(rifd_request_duration_seconds_bucket{route=\"/v1/triage\"}[1m])))"},
+       {"refId": "B", "legendFormat": "p95", "expr": "histogram_quantile(0.95, sum by (le) (rate(rifd_request_duration_seconds_bucket{route=\"/v1/triage\"}[1m])))"},
+       {"refId": "C", "legendFormat": "p99", "expr": "histogram_quantile(0.99, sum by (le) (rate(rifd_request_duration_seconds_bucket{route=\"/v1/triage\"}[1m])))"}
+     ]},
+    {"id": 2, "type": "timeseries", "title": "Requests per second, by status", "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+     "datasource": {"type": "prometheus", "uid": "prometheus"},
+     "targets": [
+       {"refId": "A", "legendFormat": "{{status}}", "expr": "sum by (status) (rate(rifd_requests_total{route=\"/v1/triage\"}[1m]))"}
+     ]},
+    {"id": 3, "type": "timeseries", "title": "Error ratio (5xx)", "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+     "datasource": {"type": "prometheus", "uid": "prometheus"},
+     "targets": [
+       {"refId": "A", "legendFormat": "errors", "expr": "sum(rate(rifd_requests_total{route=\"/v1/triage\",status=~\"5..\"}[1m])) / sum(rate(rifd_requests_total{route=\"/v1/triage\"}[1m]))"}
+     ]},
+    {"id": 4, "type": "timeseries", "title": "Predictions per second, by label and version", "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+     "datasource": {"type": "prometheus", "uid": "prometheus"},
+     "targets": [
+       {"refId": "A", "legendFormat": "{{version}} {{label}}", "expr": "sum by (version, label) (rate(rifd_predictions_total[1m]))"}
+     ]}
+  ]
+}

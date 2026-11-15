@@ -1,158 +1,547 @@
 <section class="slide title" id="title" data-auto="title">
-  <aside class="notes">REPLACE: welcome; introduce yourself; one question to the room that calibrates the pace; the rhythm of the day</aside>
+  <aside class="notes"><p>Welcome. Ask the room: who has had a model work in a notebook and fail somewhere else? Most hands go up; that gap is this course. The rhythm: four sessions a day, each about 25 minutes of ideas and a 25-minute lab. Labs run in a terminal on your laptop; container and cluster labs start tomorrow.</p><p>Check before the first lab that everyone has <code>git</code>, <code>uv</code> and a shell. The pre-work covered containers and HTTP; the entry quiz is done before this session, without AI help.</p></aside>
 </section>
 
 <section class="slide" id="agenda" data-auto="agenda"></section>
+
+<section class="slide" id="meet-rifd" data-lo="LO1">
+  <div class="kicker">The case study</div>
+  <h2>Rifd's claims team wants two notebook models in service</h2>
+  <div class="cols cols-2">
+    <div class="stack">
+      <div class="card c-teal"><h4>Farz · triage</h4><p class="small mb0">Every new motor, health or property claim gets fast track, standard or investigate.</p></div>
+      <div class="card c-cyan"><h4>Shabih · similar claims</h4><p class="small mb0">An adjuster describes a claim and gets the five most similar past claims.</p></div>
+    </div>
+    <ul class="bullets small">
+      <li><b>Munira Al-Ajmi</b>, head of claims operations: owns the latency objective and decides rollbacks</li>
+      <li><b>Adel Al-Shaikh</b>, data scientist: trained both models in a notebook</li>
+      <li><b>Ghaida Al-Ruqi</b>, on-call platform engineer</li>
+      <li><b>Bassam Al-Jaber</b>, data protection officer</li>
+      <li><b>You</b>: the engineer who takes the models from the notebook to a monitored service</li>
+    </ul>
+  </div>
+  <aside class="notes"><p>Rifd Mutual Insurance is fictional; all 50,000 claims are generated with a fixed seed, and the names, national ids and mobile numbers in them are invented. Kholoud Al-Ghannam, a senior adjuster, appears on Day 2 as the user of Shabih.</p><p>Every lab starts from its own folder in the workspace, so a missed lab never blocks the next one.</p></aside>
+</section>
 
 <!-- Session 1 -->
 
 <section class="slide section" id="s1" data-auto="section" data-session="1"></section>
 
-<section class="slide" id="s1-idea" data-lo="LO1 LO2">
-  <div class="kicker">REPLACE: the question this slide answers</div>
-  <h2>REPLACE: one idea, stated as a sentence</h2>
-  <div class="cols cols-2">
-    <ul class="bullets">
-      <li>REPLACE: at most six bullets, each a complete thought</li>
-      <li>REPLACE: bold the key phrase; numbers come from the lab run, not from memory</li>
-    </ul>
-    <div class="card c-teal"><h4>In the case study</h4><p class="small mb0">REPLACE: tie the idea to the case study and its data</p></div>
+<section class="slide" id="path-to-prediction" data-lo="LO1">
+  <div class="kicker">The path</div>
+  <h2>Six things stand between a trained model and a served prediction</h2>
+  <div class="flow">
+    <div class="step c-teal"><b>Artefact</b>the model, its signature, its pins</div>
+    <div class="arrow">→</div>
+    <div class="step c-cyan"><b>Registry</b>versions you can name</div>
+    <div class="arrow">→</div>
+    <div class="step c-purple"><b>Image</b>code, libraries, artefact</div>
+    <div class="arrow">→</div>
+    <div class="step c-amber"><b>Runtime</b>a cluster runs the image</div>
+    <div class="arrow">→</div>
+    <div class="step c-coral"><b>Endpoint</b>a versioned API</div>
+    <div class="arrow">→</div>
+    <div class="step c-navy"><b>Monitor</b>metrics, logs, traces</div>
   </div>
-  <div class="callout warn mt"><b>What goes wrong.</b> REPLACE: the failure participants will hit, and how to recognise it</div>
-  <aside class="notes">REPLACE: what to say, the demo to run, the question to ask the room, the common failure and its fix</aside>
+  <p class="lead mt">This course builds each box for Farz, one day at a time: artefact and endpoint today, image and runtime tomorrow, the monitor on Days 3 and 4.</p>
+  <aside class="notes"><p>This is LO1: by the end of the course a participant labels this diagram from memory with one sentence per box; the exit check asks for it. Walk the boxes left to right and ask, for each, "what breaks if this box is missing?" Without a registry nobody can say which model answered; without a monitor nobody knows it is wrong.</p></aside>
 </section>
 
-<section class="slide" id="s1-steps" data-lo="LO1 LO2">
-  <div class="kicker">Step by step</div>
-  <h2>REPLACE: a process, shown one step per key press</h2>
-  <div class="flow">
-    <div class="step c-teal"><b>1 · REPLACE: name</b>REPLACE: what happens first</div>
-    <div class="arrow frag" data-frag="b">→</div><div class="step c-cyan frag" data-frag="b"><b>2 · REPLACE: name</b>REPLACE: the next piece</div>
-    <div class="arrow frag" data-frag="c">→</div><div class="step c-coral frag" data-frag="c"><b>3 · REPLACE: name</b>REPLACE: the result</div>
+<section class="slide" id="the-handover" data-lo="LO2">
+  <div class="kicker">What you are given</div>
+  <h2>A notebook hand-over is a pickle, a script and a number</h2>
+  <div class="cols cols-2">
+    <div class="card c-teal flat"><h4>Adel hands over</h4><ul class="bullets small mb0"><li><code>farz_notebook.pkl</code>, the fitted pipeline</li><li><code>train_triage.py</code>, the notebook as a script</li><li>macro F1 0.728 on 10,000 held-out claims</li></ul></div>
+    <div class="card c-coral flat"><h4>Nobody wrote down</h4><ul class="bullets small mb0"><li>which library versions load it</li><li>which inputs it expects, with which types</li><li>what the claims team does with the probabilities</li></ul></div>
   </div>
-  <div class="callout tip mt frag"><b>Takeaway.</b> REPLACE: the one sentence to remember</div>
-  <aside class="notes">Press once per step and say what each step adds before the next one appears. REPLACE: the example to walk through</aside>
+  <div class="callout warn mt"><b>What goes wrong.</b> The model "works on my machine" because the machine is the missing documentation.</div>
+  <aside class="notes"><p>The F1 comes from the course's run of the notebook on the synthetic claims (the first 40,000 claims by day for training, the last 10,000 held out). Ask the room which of the three missing things they have been bitten by. Lab 1.1 finds the third one.</p></aside>
+</section>
+
+<section class="slide" id="serialisation-formats" data-lo="LO2">
+  <div class="kicker">Serialisation formats</div>
+  <h2>A model file is either data or a program</h2>
+  <table class="t small">
+    <tr><th>Format</th><th>What loading does</th><th>Portable across languages</th><th>Use it for</th></tr>
+    <tr><td>pickle, joblib</td><td>imports and calls whatever the file names</td><td>no</td><td>files you made yourself, once</td></tr>
+    <tr class="hl"><td>skops</td><td>rebuilds only types on a trusted list</td><td>no (Python, scikit-learn)</td><td>scikit-learn models you share</td></tr>
+    <tr><td>ONNX</td><td>reads a graph of operators</td><td>yes</td><td>serving outside Python</td></tr>
+    <tr><td>framework formats</td><td>weights plus a known architecture</td><td>within the framework</td><td>deep learning models</td></tr>
+  </table>
+  <aside class="notes"><p>The Python documentation warns that unpickling can run arbitrary code: never load a pickle from a source you do not trust. skops saves scikit-learn objects in a format that loads only types you approve. Farz uses skops from lab 1.1 on. Sources: Python pickle documentation; skops secure persistence.</p></aside>
+</section>
+
+<section class="slide" id="pickle-is-code" data-lo="LO2">
+  <div class="kicker">Lab 1.1 · step 2</div>
+  <h2>Read what a pickle imports before you load it</h2>
+  <pre class="code" data-file="terminal"><code class="language-bash">$ uv run python -m pickletools ../notebook/farz_notebook.pkl | grep sklearn
+sklearn.feature_extraction._dict_vectorizer
+sklearn.linear_model._logistic
+sklearn.pipeline
+sklearn.preprocessing._data</code></pre>
+  <div class="cols cols-2 mt">
+    <div class="callout tip small"><b>Load the pickle once,</b> where it was made or from someone you trust, and save it again in a safer format.</div>
+    <div class="callout note small"><b>skops says what it does not trust.</b> Farz 1.1.0, a boosted model, holds one type that is not on the default list; the course's loader accepts it by name.</div>
+  </div>
+  <aside class="notes"><p>Real output of the course's run (the list is shortened to the scikit-learn modules). The point is the habit, not this file: the four names are harmless, and a malicious file would name <code>os.system</code> instead. The type skops does not trust by default for gradient boosting is its tree predictor; <code>rifd.artefact</code> keeps a list of reviewed types and refuses any other.</p></aside>
+</section>
+
+<section class="slide" id="artefact-folder" data-lo="LO2">
+  <div class="kicker">An artefact</div>
+  <h2>Four files, each the answer to a question someone will ask</h2>
+  <div class="cols cols-2 gap-s">
+    <div class="card c-teal"><h4>model.skops</h4><p class="small mb0">What computes the probabilities? Saved so that loading runs no code.</p></div>
+    <div class="card c-cyan"><h4>signature.json</h4><p class="small mb0">What goes in and comes out? Ten input fields with types, three labels out.</p></div>
+    <div class="card c-purple"><h4>metadata.json</h4><p class="small mb0">Which version, which data, which decision rule, which sha256, which ten reference predictions?</p></div>
+    <div class="card c-amber"><h4>requirements.txt</h4><p class="small mb0">Which exact library versions load it? Six lines with <code>==</code>.</p></div>
+  </div>
+  <aside class="notes"><p>MLflow's model format has the same parts under other names: the model files, a signature, an input example and a requirements file. Ask: which file would the serving team read first? The signature: it is the contract between the model and the API they will write in session 3.</p></aside>
+</section>
+
+<section class="slide" id="hidden-decision-rule" data-lo="LO2">
+  <div class="kicker">Lab 1.1 · the planted problem</div>
+  <h2>The pickle alone reproduced 8 of the notebook's 10 predictions</h2>
+  <div class="cols cols-12 mid">
+    <div class="stat center"><div class="big">8 / 10</div><div class="lbl">reference predictions matched before the rule was exported</div></div>
+    <div class="stack">
+      <pre class="code s" data-file="notebook/train_triage.py · cell 14"><code class="language-python">INVESTIGATE_AT = 0.30
+
+def label_from(proba):
+    if proba["investigate"] &gt;= INVESTIGATE_AT:
+        return "investigate"
+    return max(proba, key=proba.get)</code></pre>
+      <p class="small mb0">CLM-041177: investigate 0.42, standard 0.57. The notebook says investigate; the pickle says standard.</p>
+    </div>
+  </div>
+  <aside class="notes"><p>Real numbers of the course's run of Lab 1.1. The decision rule is part of the model even though it is not in the model file: the artefact records it in <code>metadata.json</code> and the serving code applies it. Ask where else such rules hide: a threshold in a dashboard, a cap in a spreadsheet, a rounding in a report.</p></aside>
+</section>
+
+<section class="slide" id="pins-not-lock" data-lo="LO2">
+  <div class="kicker">Recap from FN-102, one step further</div>
+  <h2>The project's lock file and the artefact's pins answer different questions</h2>
+  <div class="cols cols-2">
+    <div class="card c-navy tint"><h4>uv.lock (FN-102)</h4><p class="small mb0">Every package of the project, for every platform: rebuilds the environment that develops and serves the service.</p></div>
+    <div class="card c-teal tint"><h4>requirements.txt of the artefact</h4><p class="small mb0">The six libraries that load this model file, at the versions that wrote it: <code>scikit-learn==1.9.1</code>, <code>numpy==2.5.4</code>, <code>skops==0.16.0</code> and three more.</p></div>
+  </div>
+  <div class="callout tip mt"><b>Proof, not belief.</b> An environment with only the pins must reproduce the ten reference predictions.</div>
+  <aside class="notes"><p>FN-102, Day 2, session 3 taught lock files; this is one slide of recap, not a lesson. The versions are those of the course's run in November 2026 and will differ in your cohort: that is the point of writing them down. A model saved by one scikit-learn version is not guaranteed to load, or to predict the same, in another.</p></aside>
+</section>
+
+<section class="slide" id="clean-reload" data-lo="LO2">
+  <div class="kicker">A reproducible build</div>
+  <h2>A clean environment holds the pins and nothing else</h2>
+  <pre class="code" data-file="terminal"><code class="language-bash">$ uv run --isolated --no-project --with-requirements artefacts/farz-1.0.0/requirements.txt \
+    python tools/check_reload.py artefacts/farz-1.0.0
+farz 1.0.0 loaded with pinned versions; 10 of 10 reference predictions match
+  ok CLM-047849  expected investigate  got investigate
+  ok CLM-049970  expected fast_track   got fast_track
+  ...</code></pre>
+  <aside class="notes"><p>Real output. <code>--isolated</code> makes uv build a fresh environment instead of reusing the project's, and <code>--no-project</code> keeps the project's own dependencies out, so the test proves the pins are enough. The loader also compares the running versions with the pins and refuses when they differ. This command is the evidence of LO2 in the capstone.</p></aside>
+</section>
+
+<section class="slide" id="check-artefact" data-lo="LO2">
+  <div class="kicker">Checkpoint</div>
+  <h2>What is missing from this artefact?</h2>
+  <div class="quiz" data-type="single" data-lo="LO2">
+    <p class="lead">A colleague exports a churn model as model.skops, signature.json and requirements.txt with exact pins. A clean environment loads it and reproduces 7 of 10 reference predictions. The notebook ranked customers and called the top 5% at risk. What is missing?</p>
+    <div class="opts">
+      <div class="opt" data-why="Blames the format: skops loads the same fitted pipeline the notebook had">A safer format than skops</div>
+      <div class="opt" data-why="The pins are exact and the environment loaded them: versions are not the difference">Looser pins, so that the newest versions install</div>
+      <div class="opt" data-ok>The decision rule: the top-5% cut-off that turned scores into labels</div>
+      <div class="opt" data-why="More reference claims would show the same gap more precisely, not close it">Twenty reference predictions instead of ten</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> The model file holds the scores; the notebook's rule that turns them into labels is part of the model and belongs in the artefact.</div>
+  </div>
+  <aside class="notes"><p>Answer: C. It is Lab 1.1's problem in another setting. If many pick B, return to the pins slide: exact pins are the fix for a different failure.</p></aside>
 </section>
 
 <section class="slide lab" id="lab-1-1" data-auto="lab" data-lab="1.1">
-  <aside class="notes">REPLACE: what to watch for while participants work, the typical problems, and the fallback for anyone who did not finish an earlier lab</aside>
+  <aside class="notes"><p>AI policy: tutor. The first four minutes build the workspace; start it during the checkpoint if the room is slow. Usual problems: a long-path error on Windows (set <code>UV_PROJECT_ENVIRONMENT</code> to a short folder), running the clean reload without <code>--isolated</code>, typing 0.3 instead of importing the constant. Solution: <code>labs/solutions/S1_1.py</code>.</p></aside>
 </section>
 
 <!-- Session 2 -->
 
 <section class="slide section" id="s2" data-auto="section" data-session="2"></section>
 
-<section class="slide" id="s2-idea" data-lo="LO2">
-  <div class="kicker">REPLACE: the question this slide answers</div>
-  <h2>REPLACE: one idea, stated as a sentence</h2>
-  <div class="cols cols-2">
-    <ul class="bullets">
-      <li>REPLACE: at most six bullets, each a complete thought</li>
-      <li>REPLACE: bold the key phrase; numbers come from the lab run, not from memory</li>
-    </ul>
-    <div class="card c-teal"><h4>In the case study</h4><p class="small mb0">REPLACE: tie the idea to the case study and its data</p></div>
-  </div>
-  <div class="callout warn mt"><b>What goes wrong.</b> REPLACE: the failure participants will hit, and how to recognise it</div>
-  <aside class="notes">REPLACE: what to say, the demo to run, the question to ask the room, the common failure and its fix</aside>
+<section class="slide" id="why-registry" data-lo="LO2">
+  <div class="kicker">Why a registry</div>
+  <h2>A registry answers "which model gave this answer?" in one lookup</h2>
+  <ul class="bullets">
+    <li>An adjuster disputes a triage: which version scored that claim, trained on which data?</li>
+    <li>A canary misbehaves: what exactly changed between the two versions?</li>
+    <li>An auditor asks for the model that ran in March: can you load it today?</li>
+    <li>Two teams both say "the new model": are they talking about the same file?</li>
+  </ul>
+  <div class="callout warn mt"><b>What goes wrong.</b> A folder called <code>final_v2_really</code> on a shared drive answers none of these.</div>
+  <aside class="notes"><p>Each question is one Rifd will meet in the next four days: the dispute in Day 3's logs, the canary on Day 4, the audit in the runbook. Ask which of them the room can answer today for a model they own.</p></aside>
 </section>
 
-<section class="slide" id="s2-steps" data-lo="LO2">
-  <div class="kicker">Step by step</div>
-  <h2>REPLACE: a process, shown one step per key press</h2>
-  <div class="flow">
-    <div class="step c-teal"><b>1 · REPLACE: name</b>REPLACE: what happens first</div>
-    <div class="arrow frag" data-frag="b">→</div><div class="step c-cyan frag" data-frag="b"><b>2 · REPLACE: name</b>REPLACE: the next piece</div>
-    <div class="arrow frag" data-frag="c">→</div><div class="step c-coral frag" data-frag="c"><b>3 · REPLACE: name</b>REPLACE: the result</div>
+<section class="slide" id="versions-never-change" data-lo="LO2">
+  <div class="kicker">Lab 1.2 · step 3</div>
+  <h2>A registered version never changes</h2>
+  <pre class="code" data-file="terminal"><code class="language-bash">$ uv run python -m rifd.registry register --name farz --version 1.0.0 --from models/farz-1.1.0
+refused: farz 1.0.0 is already registered and versions never change:
+register farz with a new version</code></pre>
+  <p class="lead mt">A release log, a canary comparison and an incident note all say "farz 1.0.0". If the name could point at another file, none of them could be checked.</p>
+  <aside class="notes"><p>Real output of the course's run. The same rule holds in MLflow (a model version is immutable; you add a new one) and in a git repository of artefacts (a tag that is never moved). Retraining on more data is a new version, even when the code did not change.</p></aside>
+</section>
+
+<section class="slide" id="what-a-version-carries" data-lo="LO2">
+  <div class="kicker">Metrics and tags</div>
+  <h2>A version carries its evidence and its lineage</h2>
+  <table class="t small">
+    <tr><th>Field</th><th>Farz 1.0.0 in the course's run</th><th>Answers</th></tr>
+    <tr><td>sha256 of the model file</td><td><code>ee8e2221b179…</code></td><td>is this the file that was registered?</td></tr>
+    <tr><td>metrics</td><td>macro F1 0.728, investigate recall 0.746</td><td>how good was it when registered?</td></tr>
+    <tr><td>tag data_sha256</td><td>hash of <code>claims.csv</code></td><td>which data trained it?</td></tr>
+    <tr><td>tag trained_by</td><td>Adel Al-Shaikh</td><td>whom do I ask?</td></tr>
+    <tr><td>tag source</td><td><code>notebook/train_triage.py</code></td><td>which code made it?</td></tr>
+  </table>
+  <aside class="notes"><p>Real values from the course's registry after Lab 1.2. In a team, the source tag is a commit id rather than a file name. Say that metrics on a held-out set are a claim about the past; Day 4 measures the version on live traffic.</p></aside>
+</section>
+
+<section class="slide" id="two-versions" data-lo="LO2">
+  <div class="kicker">The two supplied versions</div>
+  <h2>1.1.0 is better than 1.0.0, but only just</h2>
+  <div class="bars">
+    <div class="row"><span>1.0.0 macro F1</span><div class="bar c-navy" style="--w:72.8%"></div><span class="val">0.728</span></div>
+    <div class="row"><span>1.1.0 macro F1</span><div class="bar c-teal" style="--w:73.5%"></div><span class="val">0.735</span></div>
+    <div class="row"><span>1.0.0 investigate recall</span><div class="bar c-navy" style="--w:74.6%"></div><span class="val">0.746</span></div>
+    <div class="row"><span>1.1.0 investigate recall</span><div class="bar c-teal" style="--w:74.7%"></div><span class="val">0.747</span></div>
   </div>
-  <div class="callout tip mt frag"><b>Takeaway.</b> REPLACE: the one sentence to remember</div>
-  <aside class="notes">Press once per step and say what each step adds before the next one appears. REPLACE: the example to walk through</aside>
+  <div class="callout note mt"><b>Decide on live evidence.</b> A gap this small on one held-out set does not justify a release by itself; Day 4's canary does.</div>
+  <aside class="notes"><p>Real metrics of the course's run on the 10,000 held-out claims. 1.0.0 is logistic regression; 1.1.0 is gradient boosting, 38 times larger on disk (1.9 MB against 50 KB) and slower to predict. Ask what Munira gains from a 0.007 better F1, and what she pays.</p></aside>
+</section>
+
+<section class="slide" id="aliases" data-lo="LO2">
+  <div class="kicker">Aliases</div>
+  <h2>An alias moves; a version does not</h2>
+  <div class="cols cols-2">
+    <div class="card c-teal"><h4>farz@champion → 1.0.0</h4><p class="small mb0">Moving the alias changes what every reader of the alias loads, with no deployment.</p></div>
+    <div class="card c-coral"><h4>farz 1.0.0</h4><p class="small mb0">Always the same file. A rollback is a change of one line in the manifest, and the manifest says what runs.</p></div>
+  </div>
+  <div class="callout tip mt"><b>Rifd's rule.</b> Production names a version; staging and the weekly batch may follow <code>champion</code>.</div>
+  <aside class="notes"><p>This is a design choice, and Rifd's rule is one reasonable answer. The other answer, production following an alias, makes releases fast and audits hard: the manifest no longer says which model ran. MLflow writes an alias as <code>models:/farz@champion</code>.</p></aside>
+</section>
+
+<section class="slide" id="registry-tools" data-lo="LO2">
+  <div class="kicker">The same ideas, other tools</div>
+  <h2>Folder registry, MLflow and git tags share one model</h2>
+  <table class="t small">
+    <tr><th>Idea</th><th>rifd.registry (the labs)</th><th>MLflow</th><th>Git repository of artefacts</th></tr>
+    <tr><td>A model</td><td><code>--name farz</code></td><td>registered model</td><td>a folder</td></tr>
+    <tr><td>A version</td><td><code>--version 1.0.0</code></td><td>model version</td><td>an annotated tag</td></tr>
+    <tr><td>Evidence</td><td>metrics, tags</td><td>run metrics, tags</td><td>files in the commit</td></tr>
+    <tr><td>A pointer that moves</td><td>alias</td><td>alias</td><td>a branch or a file of aliases</td></tr>
+  </table>
+  <aside class="notes"><p>The labs use a folder registry of about 150 lines so that participants can read all of it. MLflow adds a server, a user interface and run tracking; check its current documentation before using it, because its interfaces change between major versions. Sources: MLflow model registry documentation.</p></aside>
+</section>
+
+<section class="slide" id="lineage" data-lo="LO1 LO2">
+  <div class="kicker">Lineage</div>
+  <h2>From one prediction back to the data, in four hops</h2>
+  <div class="flow">
+    <div class="step c-coral"><b>A response</b><code>"model": {"version": "1.0.0"}</code></div>
+    <div class="arrow">→</div>
+    <div class="step c-cyan"><b>The registry</b>farz 1.0.0, sha256</div>
+    <div class="arrow">→</div>
+    <div class="step c-purple"><b>The tags</b>data_sha256, source</div>
+    <div class="arrow">→</div>
+    <div class="step c-teal"><b>The data</b><code>claims.csv</code>, 40,000 rows</div>
+  </div>
+  <p class="lead mt">Session 3 puts the version in every response, so the first hop is always there.</p>
+  <aside class="notes"><p>Ask which hop breaks most often in practice: usually the last, because the data was a query result nobody saved. Hashing the training file at registration closes it. AE-305 builds full retraining pipelines with lineage on top of this.</p></aside>
+</section>
+
+<section class="slide" id="check-registry" data-lo="LO2">
+  <div class="kicker">Checkpoint</div>
+  <h2>Retrained on one more month</h2>
+  <div class="quiz" data-type="single" data-lo="LO2">
+    <p class="lead">Adel retrains Farz 1.0.0 with the same code on one more month of claims. Production names farz 1.0.0 in its manifest. What should be registered?</p>
+    <div class="opts">
+      <div class="opt" data-ok>A new version, 1.0.1 or 1.1.0, with the new data hash, while production keeps 1.0.0</div>
+      <div class="opt" data-why="Treats a version as a slot to refresh: production would change model with no release">The new file as 1.0.0, so production picks it up</div>
+      <div class="opt" data-why="Thinks lineage is only about code: the data changed, so the model did">Nothing: the code did not change</div>
+      <div class="opt" data-why="An alias move with no new version leaves no record of what the new file is">Move the champion alias to the new file</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> New data makes a new model; a new model is a new version with its own evidence, released on purpose.</div>
+  </div>
+  <aside class="notes"><p>Answer: A. Whether it is 1.0.1 or 1.1.0 is a team convention; say Rifd bumps the middle number when the data changes and the last when only the export changes.</p></aside>
 </section>
 
 <section class="slide lab" id="lab-1-2" data-auto="lab" data-lab="1.2">
-  <aside class="notes">REPLACE: what to watch for while participants work, the typical problems, and the fallback for anyone who did not finish an earlier lab</aside>
+  <aside class="notes"><p>AI policy: tutor. Usual problems: hashing the wrong file; a tag with a space and no quotes; Windows shells without <code>sha256sum</code> (the page gives the PowerShell line). Solution: <code>labs/solutions/S1_2.py</code>.</p></aside>
 </section>
 
 <!-- Session 3 -->
 
 <section class="slide section" id="s3" data-auto="section" data-session="3"></section>
 
-<section class="slide" id="s3-idea" data-lo="LO3">
-  <div class="kicker">REPLACE: the question this slide answers</div>
-  <h2>REPLACE: one idea, stated as a sentence</h2>
-  <div class="cols cols-2">
-    <ul class="bullets">
-      <li>REPLACE: at most six bullets, each a complete thought</li>
-      <li>REPLACE: bold the key phrase; numbers come from the lab run, not from memory</li>
-    </ul>
-    <div class="card c-teal"><h4>In the case study</h4><p class="small mb0">REPLACE: tie the idea to the case study and its data</p></div>
-  </div>
-  <div class="callout warn mt"><b>What goes wrong.</b> REPLACE: the failure participants will hit, and how to recognise it</div>
-  <aside class="notes">REPLACE: what to say, the demo to run, the question to ask the room, the common failure and its fix</aside>
+<section class="slide" id="serving-patterns" data-lo="LO3">
+  <div class="kicker">Serving patterns</div>
+  <h2>Online, batch or streaming: the caller decides</h2>
+  <table class="t small">
+    <tr><th>Pattern</th><th>The caller</th><th>At Rifd</th><th>What matters</th></tr>
+    <tr class="hl"><td>Online</td><td>waits for the answer</td><td>Farz triages a claim as it is filed</td><td>latency, availability</td></tr>
+    <tr><td>Batch</td><td>reads the results later</td><td>every night, re-score open claims for the weekly review</td><td>throughput, cost, completeness</td></tr>
+    <tr><td>Streaming</td><td>an event arrives, a result is published</td><td>score each claim update from the claims system's event queue</td><td>ordering, back-pressure, duplicates</td></tr>
+  </table>
+  <aside class="notes"><p>Farz is online: the claims system calls it while a person waits. The same artefact can serve all three; the service around it differs. Ask the room for one use case of each in their own work.</p></aside>
 </section>
 
-<section class="slide" id="s3-steps" data-lo="LO3">
-  <div class="kicker">Step by step</div>
-  <h2>REPLACE: a process, shown one step per key press</h2>
-  <div class="flow">
-    <div class="step c-teal"><b>1 · REPLACE: name</b>REPLACE: what happens first</div>
-    <div class="arrow frag" data-frag="b">→</div><div class="step c-cyan frag" data-frag="b"><b>2 · REPLACE: name</b>REPLACE: the next piece</div>
-    <div class="arrow frag" data-frag="c">→</div><div class="step c-coral frag" data-frag="c"><b>3 · REPLACE: name</b>REPLACE: the result</div>
+<section class="slide" id="contract-first" data-lo="LO3">
+  <div class="kicker">Contract first</div>
+  <h2>Write the contract before the code, and test the code against it</h2>
+  <div class="cols cols-2">
+    <pre class="code s" data-file="CONTRACT.md (excerpt)"><code class="language-markdown">| amount_sar        | number  | more than 0, at most 5,000,000 |
+| vehicle_age_years | integer | 0 to 60; required for motor    |
+| in_network        | boolean | required for health            |
+| member            | object  | never sent to the model,
+                                never logged                   |</code></pre>
+    <ul class="bullets small">
+      <li>Agreed with the claims system's team: they build against it while you build the service</li>
+      <li>Every rule becomes a test in <code>tests/test_contract.py</code></li>
+      <li>A change that breaks a caller is a new major version of the path</li>
+    </ul>
   </div>
-  <div class="callout tip mt frag"><b>Takeaway.</b> REPLACE: the one sentence to remember</div>
-  <aside class="notes">Press once per step and say what each step adds before the next one appears. REPLACE: the example to walk through</aside>
+  <aside class="notes"><p>The full contract is in each lab folder as <code>CONTRACT.md</code>. Point out the member line: personal data arrives with the claim because the claims system sends whole records; the contract says what happens to it. That is a decision Bassam, the data protection officer, signed.</p></aside>
+</section>
+
+<section class="slide" id="validate-before-model" data-lo="LO3">
+  <div class="kicker">Input validation</div>
+  <h2>Every field is checked before the model sees it</h2>
+  <pre class="code s" data-file="src/rifd/schemas.py"><code class="language-python">class Claim(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    line: Literal["motor", "health", "property"]
+    amount_sar: float = Field(gt=0, le=5_000_000)
+    vehicle_age_years: int | None = Field(default=None, ge=0, le=60)
+
+    @model_validator(mode="after")
+    def by_line(self):
+        if self.line == "motor" and self.vehicle_age_years is None:
+            raise ValueError("a motor claim needs vehicle_age_years")
+        return self</code></pre>
+  <aside class="notes"><p>A model given a negative amount or an unknown line still returns a probability: models do not refuse bad input, so the service must. <code>extra="forbid"</code> refuses a field the contract does not know, because a caller who sends it believes it has an effect. The rule across fields is a model validator that raises <code>ValueError</code>, which FastAPI turns into a validation error.</p></aside>
+</section>
+
+<section class="slide" id="typed-errors" data-lo="LO3">
+  <div class="kicker">Typed errors</div>
+  <h2>A caller switches on the error's type, never on its text</h2>
+  <table class="t small">
+    <tr><th>type</th><th class="num">status</th><th>The caller</th></tr>
+    <tr><td><code>validation-error</code></td><td class="num">422</td><td>fixes the claim; never retries it as it is</td></tr>
+    <tr><td><code>model-unavailable</code></td><td class="num">503</td><td>retries later, or sends the claim to manual triage</td></tr>
+    <tr><td><code>dependency-failed</code></td><td class="num">502</td><td>retries later</td></tr>
+    <tr><td><code>prediction-failed</code></td><td class="num">500</td><td>reports the request id</td></tr>
+  </table>
+  <div class="callout warn mt"><b>What goes wrong.</b> A 200 with <code>"error": "bad input"</code> in the body: every dashboard counts it as a success.</div>
+  <aside class="notes"><p>The types are URNs (<code>urn:rifd:problem:validation-error</code>) so that they cannot be mistaken for a web page. The warning matters on Day 3: an error hidden in a 200 is invisible to the error-rate metric and to the alert.</p></aside>
+</section>
+
+<section class="slide" id="problem-details" data-lo="LO3">
+  <div class="kicker">Problem details</div>
+  <h2>One shape for every error: RFC 9457</h2>
+  <pre class="code s" data-file="422 · application/problem+json"><code class="language-json">{
+  "type": "urn:rifd:problem:validation-error",
+  "title": "The claim does not match the contract",
+  "status": 422,
+  "detail": "1 field(s) failed validation",
+  "instance": "/v1/triage",
+  "errors": [{"field": "line", "message": "Input should be 'motor', 'health' or 'property'"}],
+  "request_id": "3f1c9a0d7e2b4c55"
+}</code></pre>
+  <aside class="notes"><p>RFC 9457, Problem Details for HTTP APIs, defines <code>type</code>, <code>title</code>, <code>status</code>, <code>detail</code> and <code>instance</code> and allows extra members such as <code>errors</code>. The request id lets the caller and the on-call engineer find the same request in the logs on Day 3. Sources: RFC 9457.</p></aside>
+</section>
+
+<section class="slide" id="versioned-path" data-lo="LO3">
+  <div class="kicker">Versions in two places</div>
+  <h2>The path carries the contract's version; the body carries the model's</h2>
+  <div class="cols cols-2">
+    <div class="card c-navy"><h4>/v1/triage</h4><p class="small mb0">Changes only when the contract breaks a caller. <code>/v2/</code> runs beside <code>/v1/</code> until every caller has moved.</p></div>
+    <div class="card c-teal"><h4>"model": {"version": "1.1.0"}</h4><p class="small mb0">Changes with every release, contract unchanged. The first hop of lineage, and the field Day 4's canary comparison groups by.</p></div>
+  </div>
+  <aside class="notes"><p>Ask: a new model needs one extra input field. Is that /v2? Only if callers must send it; an optional field with a default keeps /v1. Keep the two version numbers apart: mixing them forces a contract change for every retraining.</p></aside>
+</section>
+
+<section class="slide" id="personal-fields-dropped" data-lo="LO3">
+  <div class="kicker">Personal data at the boundary</div>
+  <h2>The member's details are validated, then dropped before the model</h2>
+  <div class="flow">
+    <div class="step c-navy"><b>Request</b>claim + description + member</div>
+    <div class="arrow">→</div>
+    <div class="step c-cyan"><b>Validated</b>national id: 10 digits, starts 1 or 2</div>
+    <div class="arrow">→</div>
+    <div class="step c-teal"><b>model_view()</b>the claim without member and text</div>
+    <div class="arrow">→</div>
+    <div class="step c-purple"><b>Farz</b>ten fields</div>
+  </div>
+  <div class="callout tip mt"><b>Data minimisation in code.</b> What the model never receives, no model log or trace can leak.</div>
+  <aside class="notes"><p>The Personal Data Protection Law asks controllers to limit personal data to what the purpose needs; here the purpose is triage, which needs none of the member's details. Bassam's decision is enforced by one method, <code>model_view()</code>, and tested. Day 3 removes the same fields from logs. Sources: Personal Data Protection Law (SDAIA).</p></aside>
+</section>
+
+<section class="slide" id="contract-tests" data-lo="LO3">
+  <div class="kicker">Lab 1.3</div>
+  <h2>Sixteen contract tests, from all failing to all passing</h2>
+  <div class="cols cols-2 mid">
+    <div class="stat center"><div class="big">0 → 16</div><div class="lbl">of 16 contract tests passing, start state to finished, in the course's run</div></div>
+    <ul class="bullets small">
+      <li>valid motor and health claims, and the model version in the answer</li>
+      <li>missing field, wrong type, out of range, unknown line, unknown field</li>
+      <li>a motor claim without its vehicle age; a malformed national id</li>
+      <li>a body that is not JSON; a request id on every response</li>
+      <li>a model that fails to load: 503, <code>model-unavailable</code></li>
+    </ul>
+  </div>
+  <aside class="notes"><p>Real counts. The start state fails all 16 because its route is <code>/triage</code>, which answers 404 to the tests; after the path is versioned, the schema and error tests fail one by one until the handlers are written. These tests are the evidence of LO3.</p></aside>
+</section>
+
+<section class="slide" id="check-contract" data-lo="LO3">
+  <div class="kicker">Checkpoint</div>
+  <h2>A claim with an extra field</h2>
+  <div class="quiz" data-type="single" data-lo="LO3">
+    <p class="lead">The claims system starts sending "fraud_flag": true with some claims. Farz's contract does not list the field. What should the service do?</p>
+    <div class="opts">
+      <div class="opt" data-why="Silently dropping it lets the caller believe the flag changed the triage">Ignore the field and triage the claim</div>
+      <div class="opt" data-why="The model has no input for it: passing it on changes nothing and hides the gap">Pass it to the model as an eleventh feature</div>
+      <div class="opt" data-why="A 500 says the service broke, and the caller will retry the same claim">Answer 500, prediction-failed</div>
+      <div class="opt" data-ok>Answer 422, validation-error, naming fraud_flag</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> The caller thinks the field matters; a validation error naming it starts the conversation about whether it should.</div>
+  </div>
+  <aside class="notes"><p>Answer: D. Some teams accept unknown fields to make rollouts easier; then they must log and count them. Rifd's contract forbids them.</p></aside>
 </section>
 
 <section class="slide lab" id="lab-1-3" data-auto="lab" data-lab="1.3">
-  <aside class="notes">REPLACE: what to watch for while participants work, the typical problems, and the fallback for anyone who did not finish an earlier lab</aside>
+  <aside class="notes"><p>AI policy: tutor. Usual problems: leaving <code>extra="ignore"</code>; raising <code>HTTPException</code> in a validator; a server from an earlier step still holding port 8000. Solution: <code>labs/solutions/S1_3.py</code>.</p></aside>
 </section>
 
 <!-- Session 4 -->
 
 <section class="slide section" id="s4" data-auto="section" data-session="4"></section>
 
-<section class="slide" id="s4-idea" data-lo="LO3">
-  <div class="kicker">REPLACE: the question this slide answers</div>
-  <h2>REPLACE: one idea, stated as a sentence</h2>
+<section class="slide" id="two-questions" data-lo="LO3">
+  <div class="kicker">Health and readiness</div>
+  <h2>"Is it alive?" and "should it get traffic?" are two questions</h2>
   <div class="cols cols-2">
-    <ul class="bullets">
-      <li>REPLACE: at most six bullets, each a complete thought</li>
-      <li>REPLACE: bold the key phrase; numbers come from the lab run, not from memory</li>
-    </ul>
-    <div class="card c-teal"><h4>In the case study</h4><p class="small mb0">REPLACE: tie the idea to the case study and its data</p></div>
+    <div class="card c-teal"><h4>/livez · liveness</h4><p class="small mb0">Can the process answer at all? If not, restart it. Never looks at the model or at a dependency.</p></div>
+    <div class="card c-cyan"><h4>/readyz · readiness</h4><p class="small mb0">Is the model loaded, verified and warm? If not, send no traffic here, and do not restart.</p></div>
   </div>
-  <div class="callout warn mt"><b>What goes wrong.</b> REPLACE: the failure participants will hit, and how to recognise it</div>
-  <aside class="notes">REPLACE: what to say, the demo to run, the question to ask the room, the common failure and its fix</aside>
+  <div class="callout warn mt"><b>What goes wrong.</b> One <code>/health</code> that says OK: traffic reaches a pod with no model, and every claim fails.</div>
+  <aside class="notes"><p>Kubernetes acts on the two answers differently: a failed liveness probe restarts the container; a failed readiness probe removes the pod from the service's endpoints. Day 2 wires both into the manifest. Sources: Kubernetes documentation, liveness, readiness and startup probes.</p></aside>
 </section>
 
-<section class="slide" id="s4-steps" data-lo="LO3">
-  <div class="kicker">Step by step</div>
-  <h2>REPLACE: a process, shown one step per key press</h2>
-  <div class="flow">
-    <div class="step c-teal"><b>1 · REPLACE: name</b>REPLACE: what happens first</div>
-    <div class="arrow frag" data-frag="b">→</div><div class="step c-cyan frag" data-frag="b"><b>2 · REPLACE: name</b>REPLACE: the next piece</div>
-    <div class="arrow frag" data-frag="c">→</div><div class="step c-coral frag" data-frag="c"><b>3 · REPLACE: name</b>REPLACE: the result</div>
+<section class="slide" id="what-the-cluster-does" data-lo="LO3 LO4">
+  <div class="kicker">What each failure means</div>
+  <h2>A wrong check turns a bad file into a restart loop</h2>
+  <table class="t small">
+    <tr><th>Situation</th><th>/livez</th><th>/readyz</th><th>The cluster</th></tr>
+    <tr><td>Starting, model loading</td><td>200</td><td>503</td><td>waits; no traffic yet</td></tr>
+    <tr class="hl"><td>Model file missing or altered</td><td>200</td><td>503</td><td>keeps it out of service; you read why</td></tr>
+    <tr><td>Process stuck</td><td>no answer</td><td>no answer</td><td>restarts it</td></tr>
+    <tr><td>Liveness that checks the model, file missing</td><td>503</td><td>503</td><td>restarts it, forever</td></tr>
+  </table>
+  <aside class="notes"><p>The last row is the trap. A pod restarted forever hides the reason in a crash count; a pod that is alive and not ready says "no artefact at models/farz-1.0.0" at <code>/readyz</code>, where the on-call engineer can read it.</p></aside>
+</section>
+
+<section class="slide" id="lazy-loading" data-lo="LO3">
+  <div class="kicker">Model loading and warm-up</div>
+  <h2>Loading on the first request makes one caller pay for everyone</h2>
+  <div class="cols cols-2 mid">
+    <div class="stack">
+      <div class="stat center"><div class="big">64 ms</div><div class="lbl">to load and verify Farz 1.0.0</div></div>
+      <div class="stat center"><div class="big">97 ms</div><div class="lbl">for its first prediction, the warm-up</div></div>
+    </div>
+    <ul class="bullets small">
+      <li>Load at start, verify the sha256, then make one warm-up prediction</li>
+      <li>The warm-up is checked against the artefact's reference label</li>
+      <li>Only then does <code>/readyz</code> say ready</li>
+    </ul>
   </div>
-  <div class="callout tip mt frag"><b>Takeaway.</b> REPLACE: the one sentence to remember</div>
-  <aside class="notes">Press once per step and say what each step adds before the next one appears. REPLACE: the example to walk through</aside>
+  <aside class="notes"><p>Real numbers from the course's run of Lab 1.4 on a laptop; yours will differ. A later prediction takes about one millisecond: the first is slower because libraries set themselves up on first use. For a bigger model the load takes seconds, and the first caller would time out.</p></aside>
+</section>
+
+<section class="slide" id="lifespan-load" data-lo="LO3">
+  <div class="kicker">Lab 1.4 · step 2</div>
+  <h2>Load and warm in the lifespan, before the first request</h2>
+  <pre class="code s" data-file="src/rifd/app.py"><code class="language-python">@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logs.configure(s.log_file)
+    load_farz(app)        # load, verify sha256, warm up; never raises
+    yield
+
+def load_farz(app):
+    try:
+        model = artefact.load(s.model_dir)
+        warm = model.predict([model.meta["reference"][0]["input"]])
+        ...
+        app.state.ready = True
+    except Exception as e:
+        app.state.load_error = str(e)   # alive, not ready, and says why</code></pre>
+  <aside class="notes"><p>The important line is the last: a failed load does not crash the process. The process stays alive, <code>/readyz</code> reports the reason, and the cluster keeps traffic away. Crashing would also work for the cluster, but the reason would be lost in a restart count.</p></aside>
+</section>
+
+<section class="slide" id="missing-model" data-lo="LO3">
+  <div class="kicker">Lab 1.4 · step 4</div>
+  <h2>With the model file missing, the service is alive and says why it is not ready</h2>
+  <div class="trace s">
+    <div class="ev call"><b>GET /livez</b><span><code>200 {"status": "alive"}</code></span></div>
+    <div class="ev error"><b>GET /readyz</b><span><code>503 urn:rifd:problem:model-unavailable · no artefact at models/missing</code></span></div>
+    <div class="ev error"><b>POST /v1/triage</b><span><code>503 urn:rifd:problem:model-unavailable</code></span></div>
+    <div class="ev final"><b>tests</b><span><code>tests/test_health.py: 5 passed</code></span></div>
+  </div>
+  <aside class="notes"><p>Real output of the course's run. A fifth test appends bytes to a copy of <code>model.skops</code>: the sha256 no longer matches, and the service is alive and not ready with "does not match the sha256". That is the registry's hash doing its work at run time.</p></aside>
+</section>
+
+<section class="slide" id="time-to-ready" data-lo="LO3 LO4">
+  <div class="kicker">Looking ahead to Day 2</div>
+  <h2>Most of the time to ready is importing libraries, not loading the model</h2>
+  <ul class="bullets">
+    <li>In the course's runs, Farz took 11 to 17 seconds from process start to ready on a laptop</li>
+    <li>Of that, loading the model took under a tenth of a second</li>
+    <li>The rest was Python importing scikit-learn, skops and the web stack</li>
+    <li class="frag">A cluster that gives up after five seconds restarts a healthy pod: Day 2 adds a <b>startup probe</b></li>
+  </ul>
+  <aside class="notes"><p>Measured with <code>tools/measure.py</code> on the course's laptop, which was also running other work: expect less on a quiet machine, and measure your own. Lab 2.4 compares this with Shabih, whose model load is much longer.</p></aside>
+</section>
+
+<section class="slide" id="check-health" data-lo="LO3">
+  <div class="kicker">Checkpoint</div>
+  <h2>Which check fails?</h2>
+  <div class="quiz" data-type="single" data-lo="LO3">
+    <p class="lead">A new Farz pod starts, but its model file was copied incompletely. The process is running and answers HTTP. What should /livez and /readyz answer?</p>
+    <div class="opts">
+      <div class="opt" data-why="A liveness failure restarts the pod, and a restart cannot fix a bad file: a restart loop">/livez 503, /readyz 503</div>
+      <div class="opt" data-ok>/livez 200, /readyz 503 with the reason</div>
+      <div class="opt" data-why="Ready with a bad model sends every claim to a service that cannot triage it">/livez 200, /readyz 200, then 503 on each prediction</div>
+      <div class="opt" data-why="Readiness is the check that guards traffic; liveness failing alone would restart a pod that could not serve anyway">/livez 503, /readyz 200</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> The process is fine and the model is not: stop the traffic, keep the process, and say why.</div>
+  </div>
+  <aside class="notes"><p>Answer: B. If anyone picks A, return to the restart-loop row of the table.</p></aside>
 </section>
 
 <section class="slide lab" id="lab-1-4" data-auto="lab" data-lab="1.4">
-  <aside class="notes">REPLACE: what to watch for while participants work, the typical problems, and the fallback for anyone who did not finish an earlier lab</aside>
+  <aside class="notes"><p>AI policy: tutor. Usual problems: a <code>/livez</code> that calls <code>/readyz</code>; leaving the lazy load in the route as well; background servers from earlier labs on port 8000 (<code>kill %1</code>). Solution: <code>labs/solutions/S1_4.py</code>.</p></aside>
 </section>
 
-<section class="slide" id="wrap-up">
+<section class="slide" id="wrap-up" data-lo="LO1 LO2 LO3">
   <div class="kicker">Day 1 · wrap-up</div>
-  <h2>Three things to keep</h2>
+  <h2>Three things to keep from today</h2>
   <div class="cols cols-3">
-    <div class="card c-teal"><h4>Remember</h4><p class="small mb0">REPLACE: one idea participants keep</p></div>
-    <div class="card c-coral"><h4>Remember</h4><p class="small mb0">REPLACE: one idea participants keep</p></div>
-    <div class="card c-purple"><h4>Remember</h4><p class="small mb0">REPLACE: one idea participants keep</p></div>
+    <div class="card c-teal"><h4>The rule is part of the model</h4><p class="small mb0">An artefact holds the file, the signature, the decision rule and the pins, and proves itself on reference predictions.</p></div>
+    <div class="card c-cyan"><h4>Versions never change</h4><p class="small mb0">Every answer names its version; the registry turns the version into data, code and evidence.</p></div>
+    <div class="card c-coral"><h4>The contract is tested</h4><p class="small mb0">Validation, typed errors, and two checks that say alive and ready separately.</p></div>
   </div>
+  <aside class="notes"><p>Ask each participant to say which of the three their own team does least. Tomorrow the service goes into a container image and onto a cluster.</p></aside>
 </section>
 
-<section class="slide dark" id="next" data-label="Next">
+<section class="slide dark" id="next" data-lo="LO4">
   <div class="kicker">Next</div>
-  <h2>Day 2: Containers and a cluster</h2>
-  <p class="lead">REPLACE: what participants prepare before then; unfinished labs can be finished at home</p>
-  <aside class="notes">REPLACE: accounts, installs or reading participants need before the next unit</aside>
+  <h2>Day 2: containers and a cluster</h2>
+  <ul class="bullets">
+    <li>Start your container runtime (Docker or Podman) and check that <code>docker run hello-world</code> works</li>
+    <li>Install kind, k3d or minikube and <code>kubectl</code>; the setup notes are in <code>labs/README.md</code></li>
+    <li>Lab 2.1's container file is written without AI help: read the pre-work on layers again</li>
+  </ul>
+  <aside class="notes"><p>Ask anyone whose laptop cannot run containers to say so tonight: Day 2's container steps then run on a neighbour's machine or the trainer's demonstration, and every other step still runs with uv.</p></aside>
 </section>
