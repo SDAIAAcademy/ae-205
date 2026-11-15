@@ -249,7 +249,7 @@
     <div class="opts">
       <div class="opt" data-why="A significant p-value with a tiny PSI is a small move, not a shift">Age and channel shifted; the model is degrading</div>
       <div class="opt" data-why="Input drift says nothing yet about accuracy; that needs the labels">Channel shifted, so accuracy has fallen and the model must be retrained now</div>
-      <div class="opt" data-why="The channel's PSI is far above any threshold">Nothing shifted, since all p-values are below 0.05</div>
+      <div class="opt" data-why="One feature far above the threshold is a shift, whatever the others do">Nothing shifted: two of three features are stable</div>
       <div class="opt" data-ok>Channel shifted; age moved slightly and does not matter; accuracy is unknown until the labels arrive</div>
     </div>
     <div class="callout tip why"><b>Why.</b> Name the large shift, set aside the significant but tiny move, and say what the missing labels leave open.</div>

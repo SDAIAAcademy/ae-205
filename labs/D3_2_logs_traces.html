@@ -14,8 +14,11 @@
   <div class="step">
     <h3>Find the personal fields in the current logs <span class="min">4 min</span></h3>
     <pre class="code" data-file="terminal"><code class="language-bash">cd rifd-labs/3.2
-RIFD_LOG_FILE=runs/service.log RIFD_TRACE_FILE=runs/spans.jsonl uv run uvicorn rifd.app:app --port 8000 &amp;
-uv run python tools/replay.py --file ../data/replay/week1.csv --rate 40 --limit 200 --out runs/replay.jsonl
+export RIFD_LOG_FILE=runs/service.log
+export RIFD_TRACE_FILE=runs/spans.jsonl
+uv run uvicorn rifd.app:app --port 8000 &amp;
+uv run python tools/replay.py --rate 40 --limit 200 \
+  --file ../data/replay/week1.csv --out runs/replay.jsonl
 grep -c national_id runs/service.log</code></pre>
     <p>Stop the server and delete <code>runs/service.log</code> and <code>runs/spans.jsonl</code> before the next run.</p>
   </div>
@@ -27,8 +30,17 @@ grep -c national_id runs/service.log</code></pre>
 
   <div class="step">
     <h3>Add spans; find the slowest request and its slow span <span class="min">8 min</span></h3>
-    <p>In <code>app.py</code>, wrap the policy lookup in <code>tr.start_as_current_span("policy_lookup")</code>. Run the replay again with 400 claims, then find the slowest request (the span with no parent and the longest duration) and its children.</p>
-    <pre class="code" data-file="terminal"><code class="language-bash">uv run python -c "import json; s=[json.loads(x) for x in open('runs/spans.jsonl')]; r=max((x for x in s if not x['parent_id']), key=lambda x: x['duration_ms']); print(r['duration_ms'], [(x['name'], x['duration_ms']) for x in s if x['trace_id']==r['trace_id']])"</code></pre>
+    <p>In <code>app.py</code>, wrap the policy lookup in a span of its own named <code>policy_lookup</code> (with <code>tr.start_as_current_span</code>). Run the replay again with 400 claims, then find the slowest request (the span with no parent and the longest duration) and its children.</p>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run python - &lt;&lt;'EOF'
+import json
+spans = [json.loads(x) for x in open("runs/spans.jsonl")]
+roots = [s for s in spans if not s["parent_id"]]
+slow = max(roots, key=lambda s: s["duration_ms"])
+print(slow["duration_ms"])
+for s in spans:
+    if s["trace_id"] == slow["trace_id"]:
+        print(" ", s["name"], s["duration_ms"])
+EOF</code></pre>
     <p>Write <code>runs/slowest.md</code>: the trace, its spans with their times, and which step made it slow.</p>
   </div>
 

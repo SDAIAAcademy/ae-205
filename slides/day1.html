@@ -293,11 +293,11 @@ register farz with a new version</code></pre>
   <div class="kicker">Contract first</div>
   <h2>Write the contract before the code, and test the code against it</h2>
   <div class="cols cols-2">
-    <pre class="code s" data-file="CONTRACT.md (excerpt)"><code class="language-markdown">| amount_sar        | number  | more than 0, at most 5,000,000 |
-| vehicle_age_years | integer | 0 to 60; required for motor    |
-| in_network        | boolean | required for health            |
+    <pre class="code s" data-file="CONTRACT.md (excerpt)"><code class="language-markdown">| amount_sar        | number  | over 0, up to 5,000,000 |
+| vehicle_age_years | integer | 0 to 60; motor: needed  |
+| in_network        | boolean | health: needed          |
 | member            | object  | never sent to the model,
-                                never logged                   |</code></pre>
+                                never logged            |</code></pre>
     <ul class="bullets small">
       <li>Agreed with the claims system's team: they build against it while you build the service</li>
       <li>Every rule becomes a test in <code>tests/test_contract.py</code></li>
