@@ -245,7 +245,7 @@ def check_3_1() -> None:
                    "import json\nwith TestClient(create_app()) as c:\n"
                    " c.post('/v1/triage', json={'claim_id':'CLM-050001','line':'property','region':'asir','channel':'app','amount_sar':900.0,'policy_tenure_months':12,'prior_claims_12m':0,'days_to_report':2})\n"
                    " print(json.dumps(c.get('/metrics').text))")
-    body = json.loads(out.splitlines()[-1]) if code == 0 else ""
+    body = next((json.loads(x) for x in reversed(out.splitlines()) if x.startswith('"')), "") if code == 0 else ""  # log lines may follow
     for name in ("rifd_requests_total", "rifd_request_duration_seconds_bucket", "rifd_predictions_total"):
         need(name in body, f"/metrics exposes {name}")
     need('le="0.15"' in body, "the histogram has a bucket at the 150 ms objective")
@@ -267,7 +267,8 @@ def check_3_2() -> None:
     pytest("tests/test_redaction.py")
     log = text("runs/service.log")
     if need(log, "runs/service.log from your traffic run"):
-        need(not PERSONAL.search(log), "no national id or mobile number in runs/service.log", "runs/service.log still holds personal numbers: " + PERSONAL.search(log).group(0)[:3] + "...")
+        leak = PERSONAL.search(log)
+        need(not leak, "no national id or mobile number in runs/service.log", "runs/service.log still holds personal numbers: " + (leak.group(0)[:3] if leak else "") + "...")
         rows = [json.loads(x) for x in log.splitlines() if x.startswith("{")]
         need(rows and all("request_id" in r for r in rows if r.get("event") in ("request", "triage")), "every request line carries a request id")
     spans = [json.loads(x) for x in text("runs/spans.jsonl").splitlines() if x.strip()]

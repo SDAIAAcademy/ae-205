@@ -103,7 +103,12 @@ def server(lab_dir: Path, port: int, env: dict | None = None, workers: int = 1, 
     finally:
         _kill_tree(proc)
         log.close()
-        (lab_dir / f"server_{port}.out").unlink(missing_ok=True)
+        for _ in range(20):  # Windows releases the file a moment after the process tree ends
+            try:
+                (lab_dir / f"server_{port}.out").unlink(missing_ok=True)
+                break
+            except PermissionError:
+                time.sleep(0.5)
 
 
 def post_json(url: str, body: dict) -> dict:

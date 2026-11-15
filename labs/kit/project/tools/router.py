@@ -12,16 +12,18 @@ one Service with replicas in the ratio you want, or a weighted route of a gatewa
 from __future__ import annotations
 
 import argparse
-import asyncio
 import hashlib
 import json
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
 import uvicorn
 from fastapi import FastAPI, Request, Response
+from starlette.concurrency import run_in_threadpool
 
 STATE = {"stable": "", "canary": "", "weight": 0.0, "shadow": False, "events": "runs/router_events.jsonl", "t0": time.monotonic()}
 
@@ -37,16 +39,28 @@ def to_canary(claim_id: str) -> bool:
     return bucket < STATE["weight"] * 10000
 
 
-client: httpx.AsyncClient | None = None
+# One synchronous client per thread: on some Windows laptops httpx's asynchronous client adds
+# hundreds of milliseconds under load, which would make the router, not the model, the slow part.
+_local = threading.local()
+_shadow_pool = ThreadPoolExecutor(max_workers=16)
+_write = threading.Lock()
+
+
+def _client() -> httpx.Client:
+    if not hasattr(_local, "client"):
+        _local.client = httpx.Client(timeout=10.0)
+    return _local.client
+
+
+def _forward(target: str, raw: bytes) -> httpx.Response:
+    return _client().post(target + "/v1/triage", content=raw, headers={"content-type": "application/json"})
 
 
 @asynccontextmanager
 async def lifespan(_app):
-    global client
-    client = httpx.AsyncClient(timeout=10.0, limits=httpx.Limits(max_connections=400))
     event("start", stable=STATE["stable"], canary=STATE["canary"], weight=STATE["weight"], shadow=STATE["shadow"])
     yield
-    await client.aclose()
+    _shadow_pool.shutdown(wait=False)
 
 
 app = FastAPI(title="Rifd release router", lifespan=lifespan)
@@ -73,15 +87,14 @@ async def triage(request: Request):
         claim_id = json.loads(raw).get("claim_id", "")
     except (ValueError, AttributeError):
         claim_id = ""
-    headers = {"content-type": "application/json"}
     if STATE["shadow"] and STATE["canary"]:
-        asyncio.create_task(_shadow(raw, headers))
+        _shadow_pool.submit(_shadow, raw)
         target, name = STATE["stable"], "stable"
     elif STATE["canary"] and to_canary(claim_id):
         target, name = STATE["canary"], "canary"
     else:
         target, name = STATE["stable"], "stable"
-    r = await client.post(target + "/v1/triage", content=raw, headers=headers)
+    r = await run_in_threadpool(_forward, target, raw)
     out = Response(r.content, status_code=r.status_code, media_type=r.headers.get("content-type"))
     out.headers["X-Rifd-Route"] = name
     try:
@@ -91,16 +104,16 @@ async def triage(request: Request):
     return out
 
 
-async def _shadow(raw: bytes, headers: dict) -> None:
+def _shadow(raw: bytes) -> None:
     start = time.perf_counter()
     try:
-        r = await client.post(STATE["canary"] + "/v1/triage", content=raw, headers=headers)
+        r = _forward(STATE["canary"], raw)
         body = r.json()
         rec = {"status": r.status_code, "ms": round((time.perf_counter() - start) * 1000, 2),
                "version": body.get("model", {}).get("version"), "label": body.get("label"), "claim_id": json.loads(raw).get("claim_id")}
     except (httpx.HTTPError, ValueError) as e:
         rec = {"status": 0, "error": type(e).__name__}
-    with open(Path(STATE["events"]).with_name("shadow.jsonl"), "a", encoding="utf-8") as f:
+    with _write, open(Path(STATE["events"]).with_name("shadow.jsonl"), "a", encoding="utf-8") as f:
         f.write(json.dumps(rec) + "\n")
 
 

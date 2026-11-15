@@ -1,37 +1,59 @@
 <article class="lab" data-lab="3.3">
   <div class="box goal">
     <h3>Goal</h3>
-    <p>REPLACE: by the end, participants can …</p>
+    <p>Load Farz the way the claims system will after a flood: an open load of real claims at fixed rates. Find the rate at which the 95th percentile breaks Munira's objective of 150 ms, and say why it breaks there.</p>
   </div>
 
   <h2>What you need</h2>
   <ul>
-    <li>REPLACE: the files, the tool and the account the lab uses</li>
+    <li>The lab folder <code>rifd-labs/3.3</code>: <code>tools/loadtest.py</code>, which sends <code>loadtest/one_claim.csv</code> by default, and <code>loadtest/locustfile.py</code></li>
+    <li><code>../data/objective.json</code>: p95 at or under 150 ms at 200 requests a second, errors at or under 1%</li>
+    <li>A quiet laptop: close other heavy programs, because the load generator and the service share its processors</li>
+    <li>AI policy: tutor.</li>
   </ul>
 
   <div class="step">
-    <h3>REPLACE: the first step <span class="min">15 min</span></h3>
-    <p>REPLACE: what to do and why, in two sentences</p>
-    <div class="prompt" data-tool="Container runtime and image builder">REPLACE: the prompt participants copy, with the parts they change in <span class="ph">colour</span></div>
+    <h3>Read the objective and the locust file <span class="min">4 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">cd rifd-labs/3.3
+cat ../data/objective.json
+sed -n 1,12p loadtest/locustfile.py</code></pre>
+    <p>Note who owns the objective and where latency is measured. In the locust file, find how a number of users becomes a rate, and when that stops being true.</p>
   </div>
 
   <div class="step">
-    <h3>REPLACE: the second step <span class="min">10 min</span></h3>
-    <p>REPLACE: what to do and why, in two sentences</p>
+    <h3>Make the requests realistic <span class="min">5 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run uvicorn rifd.app:app --host 127.0.0.1 --port 8000 --log-level warning &amp;
+uv run python tools/loadtest.py --rates 100 --seconds 15 --out runs/load_one_claim.json</code></pre>
+    <p>That is the supplied test: one motor claim, over and over. In <code>tools/loadtest.py</code>, change the default <code>--file</code> to <code>../data/replay/week1.csv</code>, the week of claims Farz will see.</p>
+  </div>
+
+  <div class="step">
+    <h3>Run three rates with a warm-up <span class="min">10 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run python tools/loadtest.py --rates 80 150 220 --seconds 20 --warmup 3 --label "1 worker" --out runs/load.json</code></pre>
+    <p>If every rate holds or every rate breaks, choose others: the check asks for one on each side. Locust is an option: <code>uv run locust -f loadtest/locustfile.py --headless --host http://127.0.0.1:8000 --users 150 --spawn-rate 50 --run-time 40s --only-summary</code>.</p>
+  </div>
+
+  <div class="step">
+    <h3>Report where the objective breaks; check <span class="min">6 min</span></h3>
+    <p>Write <code>runs/load_note.md</code>: the table of rates, where the objective breaks, and why, with the trace of lab 3.2 in mind. Stop the server.</p>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run ../lab.py check 3.3</code></pre>
   </div>
 
   <div class="step stretch">
     <h3>✱ Stretch</h3>
-    <p>REPLACE: an extension for those who finish early</p>
+    <p>Run the same rates with k6 and compare the two tools' numbers.</p>
   </div>
 
   <h2>Check yourself</h2>
   <ol class="checks">
-    <li>REPLACE: a question that shows the lab worked</li>
+    <li>Why did one claim a hundred times a second give a 95th percentile that was too good?</li>
+    <li>At the rate where the objective broke, did the achieved rate keep up with the target?</li>
+    <li>What would change these numbers on the cluster, compared with your laptop?</li>
   </ol>
 
   <details class="instructor">
     <summary>For the trainer</summary>
-    <p>REPLACE: the answer key, the traps and the common errors</p>
+    <p>In a quiet run of the course's solution, one worker carried about 160 requests a second with a 95th percentile between 126 and 150 ms near that rate, and broke the objective above it; the floor of the 95th percentile is the 120 ms policy lookup that about 7% of claims make. The one-claim test reported a much lower 95th percentile because it never takes that path.</p>
+    <p>Later runs on 15 November 2026, on the same laptop shared with several other heavy jobs, gave very different numbers: 40 a second held (95th percentile 137 ms, set by the lookup), while 100 and 220 a second broke it badly (about 1 s), with the achieved rate stuck near 85 to 88 a second; even the one-claim test broke at 100 a second (755 ms). A load test measures the machine as well as the service, so capacity is measured on the hardware that will serve, with nothing else running. The solution takes its rates from <code>RIFD_RATES</code> (default <code>40 100 220</code>) so that a trainer can move them. Rehearse on a room machine and put your numbers on the slide. Solution: <code>labs/solutions/S3_3.py</code>.</p>
   </details>
 </article>

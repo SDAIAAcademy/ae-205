@@ -28,7 +28,7 @@ docker image ls rifd/claims</code></pre>
     <h3>Build it; record size, time and a rebuild after a code change <span class="min">6 min</span></h3>
     <pre class="code" data-file="terminal"><code class="language-bash">time docker build -t rifd/claims:1.0.0 .
 docker image ls rifd/claims
-docker run --rm -p 8000:8000 rifd/claims:1.0.0   # then: curl localhost:8000/readyz</code></pre>
+docker run --rm -p 8000:8000 rifd/claims:1.0.0   # then: curl 127.0.0.1:8000/readyz</code></pre>
     <p>Change the same line again and rebuild: only the layers after <code>COPY src</code> should run.</p>
   </div>
 

@@ -24,7 +24,7 @@ uv run python -c "import json; print(json.load(open('models/shabih-1.0.0/items.j
     <p>In <code>src/rifd/routes_similar.py</code>, replace the TODO: search the index with <code>m.search(query.description, k=query.k, line=query.line)</code> inside a span named <code>similar</code>, and answer with the <code>Similar</code> schema and the model's name and version.</p>
     <pre class="code" data-file="terminal"><code class="language-bash">uv run pytest tests/test_similar.py
 RIFD_SERVICE=shabih uv run uvicorn rifd.app:app --port 8001 &amp;
-curl -s -X POST localhost:8001/v1/similar -H "content-type: application/json" \
+curl -s -X POST 127.0.0.1:8001/v1/similar -H "content-type: application/json" \
   -d '{"description": "Windscreen cracked by a stone on the highway", "k": 3}'
 kill %1</code></pre>
   </div>

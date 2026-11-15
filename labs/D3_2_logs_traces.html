@@ -1,37 +1,57 @@
 <article class="lab" data-lab="3.2">
   <div class="box goal">
     <h3>Goal</h3>
-    <p>REPLACE: by the end, participants can …</p>
+    <p>Make every log line of Farz a JSON record that carries the request id and no personal data, prove it with a test, and follow the slowest request of a replay through its spans to the step that made it slow.</p>
   </div>
 
   <h2>What you need</h2>
   <ul>
-    <li>REPLACE: the files, the tool and the account the lab uses</li>
+    <li>The lab folder <code>rifd-labs/3.2</code>: a service that logs the whole claim, a logger without its redaction step, and no span around the policy lookup</li>
+    <li>structlog for the logs and the OpenTelemetry SDK for the spans; the spans go to <code>runs/spans.jsonl</code>, so no collector is needed</li>
+    <li>AI policy: tutor.</li>
   </ul>
 
   <div class="step">
-    <h3>REPLACE: the first step <span class="min">15 min</span></h3>
-    <p>REPLACE: what to do and why, in two sentences</p>
-    <div class="prompt" data-tool="Container runtime and image builder">REPLACE: the prompt participants copy, with the parts they change in <span class="ph">colour</span></div>
+    <h3>Find the personal fields in the current logs <span class="min">4 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">cd rifd-labs/3.2
+RIFD_LOG_FILE=runs/service.log RIFD_TRACE_FILE=runs/spans.jsonl uv run uvicorn rifd.app:app --port 8000 &amp;
+uv run python tools/replay.py --file ../data/replay/week1.csv --rate 40 --limit 200 --out runs/replay.jsonl
+grep -c national_id runs/service.log</code></pre>
+    <p>Stop the server and delete <code>runs/service.log</code> and <code>runs/spans.jsonl</code> before the next run.</p>
   </div>
 
   <div class="step">
-    <h3>REPLACE: the second step <span class="min">10 min</span></h3>
-    <p>REPLACE: what to do and why, in two sentences</p>
+    <h3>Log JSON with a request id; redact at the edge <span class="min">9 min</span></h3>
+    <p>In <code>src/rifd/app.py</code>, log the claim id, line, label and version instead of the whole claim. In <code>src/rifd/logs.py</code>, bind the request id in <code>bind_request()</code> and put the <code>redact</code> processor back in the chain, as a last defence if someone logs a member field again. Run <code>uv run pytest tests/test_redaction.py</code>.</p>
+  </div>
+
+  <div class="step">
+    <h3>Add spans; find the slowest request and its slow span <span class="min">8 min</span></h3>
+    <p>In <code>app.py</code>, wrap the policy lookup in <code>tr.start_as_current_span("policy_lookup")</code>. Run the replay again with 400 claims, then find the slowest request (the span with no parent and the longest duration) and its children.</p>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run python -c "import json; s=[json.loads(x) for x in open('runs/spans.jsonl')]; r=max((x for x in s if not x['parent_id']), key=lambda x: x['duration_ms']); print(r['duration_ms'], [(x['name'], x['duration_ms']) for x in s if x['trace_id']==r['trace_id']])"</code></pre>
+    <p>Write <code>runs/slowest.md</code>: the trace, its spans with their times, and which step made it slow.</p>
+  </div>
+
+  <div class="step">
+    <h3>Check <span class="min">4 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run ../lab.py check 3.2</code></pre>
   </div>
 
   <div class="step stretch">
     <h3>✱ Stretch</h3>
-    <p>REPLACE: an extension for those who finish early</p>
+    <p>Pass the request id to the policy lookup as a header and see it in the lookup's own log.</p>
   </div>
 
   <h2>Check yourself</h2>
   <ol class="checks">
-    <li>REPLACE: a question that shows the lab worked</li>
+    <li>Name two places personal data could still leave Farz after your change.</li>
+    <li>Why is the redaction processor a last defence and not the main one?</li>
+    <li>What share of requests called the policy lookup, and how did that share decide the 95th percentile?</li>
   </ol>
 
   <details class="instructor">
     <summary>For the trainer</summary>
-    <p>REPLACE: the answer key, the traps and the common errors</p>
+    <p>In the course's run the start state wrote 200 of its 401 log lines with a national id or a mobile number: every triage line, because it logged the claim with its member block. After the fix none did, every request line carried a request id, and 7.0% of 401 requests called the policy lookup. The slowest request's trace was <code>POST /v1/triage</code> with <code>policy_lookup</code> taking nearly all of its time and <code>predict</code> about 2 ms. The lookup is a 120 ms wait; on the shared laptop of the course's run it stretched to several hundred milliseconds, so expect smaller numbers on a quiet machine.</p>
+    <p>Answers: in a trace attribute, an exception message that prints the body, the access log of a proxy; the main defence is not logging the body at all, because a pattern cannot know every way personal data is written; about 7%, which is more than the 5% the 95th percentile ignores, so the 95th percentile falls inside the slow requests. Solution: <code>labs/solutions/S3_2.py</code>.</p>
   </details>
 </article>

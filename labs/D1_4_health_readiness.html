@@ -15,8 +15,8 @@
     <h3>See the old health check say OK with no model <span class="min">4 min</span></h3>
     <pre class="code" data-file="terminal"><code class="language-bash">cd rifd-labs/1.4
 RIFD_MODEL_DIR=models/missing uv run uvicorn rifd.app:app --port 8000 &amp;
-curl -s localhost:8000/health
-curl -s -X POST localhost:8000/v1/triage -H "content-type: application/json" -d @examples/motor.json</code></pre>
+curl -s 127.0.0.1:8000/health
+curl -s -X POST 127.0.0.1:8000/v1/triage -H "content-type: application/json" -d @examples/motor.json</code></pre>
     <p>A cluster that trusts <code>/health</code> sends this pod traffic, and every claim fails. Stop the server.</p>
   </div>
 
@@ -33,8 +33,8 @@ curl -s -X POST localhost:8000/v1/triage -H "content-type: application/json" -d 
   <div class="step">
     <h3>Test both with the model file missing <span class="min">6 min</span></h3>
     <pre class="code" data-file="terminal"><code class="language-bash">RIFD_MODEL_DIR=models/missing uv run uvicorn rifd.app:app --port 8000 &amp;
-curl -si localhost:8000/livez | head -1
-curl -si localhost:8000/readyz
+curl -si 127.0.0.1:8000/livez | head -1
+curl -si 127.0.0.1:8000/readyz
 kill %1
 uv run pytest tests/test_health.py</code></pre>
   </div>

@@ -1,5 +1,5 @@
 <section class="slide title" id="title" data-auto="title">
-  <aside class="notes">REPLACE: welcome; introduce yourself; one question to the room that calibrates the pace; the rhythm of the day</aside>
+  <aside class="notes"><p>Welcome to Day 3. Ask the room: how did you last find out that a service of yours was slow, from a dashboard or from a user? Today Farz gets the instruments that answer before a user does, then a load test and a sizing decision against Munira's objective.</p><p>Every lab today runs with uv on the laptop; no container runtime is needed. Ask participants to close heavy programs before sessions 3 and 4: load tests measure the laptop as much as the service.</p></aside>
 </section>
 
 <section class="slide" id="agenda" data-auto="agenda"></section>
@@ -8,151 +8,386 @@
 
 <section class="slide section" id="s1" data-auto="section" data-session="1"></section>
 
-<section class="slide" id="s1-idea" data-lo="LO5">
-  <div class="kicker">REPLACE: the question this slide answers</div>
-  <h2>REPLACE: one idea, stated as a sentence</h2>
-  <div class="cols cols-2">
-    <ul class="bullets">
-      <li>REPLACE: at most six bullets, each a complete thought</li>
-      <li>REPLACE: bold the key phrase; numbers come from the lab run, not from memory</li>
-    </ul>
-    <div class="card c-teal"><h4>In the case study</h4><p class="small mb0">REPLACE: tie the idea to the case study and its data</p></div>
+<section class="slide" id="three-questions" data-lo="LO5">
+  <div class="kicker">What to measure</div>
+  <h2>Rate, errors and duration describe what every caller felt</h2>
+  <div class="cols cols-3">
+    <div class="card c-teal"><h4>Rate</h4><p class="small mb0">Requests a second, by route. The claims system's traffic, as Farz saw it.</p></div>
+    <div class="card c-coral"><h4>Errors</h4><p class="small mb0">The share of requests that failed, by status. A 5xx is Farz's fault; a 4xx is the caller's.</p></div>
+    <div class="card c-navy"><h4>Duration</h4><p class="small mb0">How long requests took, as a distribution: percentiles, not an average.</p></div>
   </div>
-  <div class="callout warn mt"><b>What goes wrong.</b> REPLACE: the failure participants will hit, and how to recognise it</div>
-  <aside class="notes">REPLACE: what to say, the demo to run, the question to ask the room, the common failure and its fix</aside>
+  <div class="callout tip mt"><b>A model adds a fourth.</b> What it predicted: the share of each label, by version.</div>
+  <aside class="notes"><p>This is the RED method (rate, errors, duration), a reduction of Google's four golden signals, which add saturation. Saturation comes in session 4 with sizing. The fourth metric is the one an ordinary web service does not have: a model can answer fast, with status 200, and be wrong for everyone.</p></aside>
 </section>
 
-<section class="slide" id="s1-steps" data-lo="LO5">
-  <div class="kicker">Step by step</div>
-  <h2>REPLACE: a process, shown one step per key press</h2>
-  <div class="flow">
-    <div class="step c-teal"><b>1 · REPLACE: name</b>REPLACE: what happens first</div>
-    <div class="arrow frag" data-frag="b">→</div><div class="step c-cyan frag" data-frag="b"><b>2 · REPLACE: name</b>REPLACE: the next piece</div>
-    <div class="arrow frag" data-frag="c">→</div><div class="step c-coral frag" data-frag="c"><b>3 · REPLACE: name</b>REPLACE: the result</div>
+<section class="slide" id="metric-types" data-lo="LO5">
+  <div class="kicker">Prometheus metric types</div>
+  <h2>Counters only go up; a histogram counts observations into buckets</h2>
+  <table class="t small">
+    <tr><th>Type</th><th>What it holds</th><th>Farz uses it for</th></tr>
+    <tr><td>Counter</td><td>a total that only increases; <code>rate()</code> turns it into a speed</td><td><code>rifd_requests_total</code>, <code>rifd_predictions_total</code></td></tr>
+    <tr><td>Gauge</td><td>a value that goes up and down</td><td><code>rifd_model_ready</code></td></tr>
+    <tr class="hl"><td>Histogram</td><td>a count per bucket boundary, plus a sum and a count</td><td><code>rifd_request_duration_seconds</code></td></tr>
+    <tr><td>Summary</td><td>percentiles computed in the process</td><td>nothing: they cannot be added across replicas</td></tr>
+  </table>
+  <aside class="notes"><p>The Prometheus client libraries define these four. Ask why a counter is better than a gauge of "requests in the last minute": a counter survives a missed scrape, because the next one still shows the total, and <code>rate()</code> handles restarts that reset it to zero.</p></aside>
+</section>
+
+<section class="slide" id="labels-cardinality" data-lo="LO5">
+  <div class="kicker">Labels</div>
+  <h2>Every distinct set of label values is a new time series</h2>
+  <div class="cols cols-2">
+    <pre class="code s" data-file="src/rifd/metrics.py"><code class="language-python">self.predictions = Counter(
+    "rifd_predictions",
+    "Predictions made, by model version and label",
+    ["model", "version", "label"])</code></pre>
+    <ul class="bullets small">
+      <li>2 versions × 3 labels: <b>6 series</b></li>
+      <li>Add <code>claim_id</code>: a series per claim, and the monitoring system stores every one</li>
+      <li>A label value is also data that leaves the service: never a member field</li>
+    </ul>
   </div>
-  <div class="callout tip mt frag"><b>Takeaway.</b> REPLACE: the one sentence to remember</div>
-  <aside class="notes">Press once per step and say what each step adds before the next one appears. REPLACE: the example to walk through</aside>
+  <aside class="notes"><p>High cardinality is the commonest way to break a Prometheus server. The second point ties back to Day 2's placement table: the dashboards may run outside the Kingdom only because their labels carry no personal data. A claim id is not personal by itself, but it links to a member in the claims system.</p></aside>
+</section>
+
+<section class="slide" id="histogram-quantile" data-lo="LO5">
+  <div class="kicker">Percentiles from buckets</div>
+  <h2>histogram_quantile finds the bucket and draws a straight line inside it</h2>
+  <pre class="code s" data-file="PromQL"><code class="language-text">histogram_quantile(0.95,
+  sum by (le) (rate(rifd_request_duration_seconds_bucket{route="/v1/triage"}[1m])))</code></pre>
+  <div class="cols cols-2 mt">
+    <div class="callout tip small"><b>Sum, then estimate.</b> Bucket rates add up across replicas; the 95th percentile of the sum is the 95th percentile of the service.</div>
+    <div class="callout warn small"><b>Only as precise as the buckets.</b> Farz's boundaries are 0.1, 0.15 and 0.2 around the objective; with only 0.1 and 0.5 the estimate could be anywhere in between.</div>
+  </div>
+  <aside class="notes"><p>The function assumes observations are spread evenly inside a bucket and interpolates. That is why the course's buckets are dense around 150 ms, where Munira's objective is judged: <code>(0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.15, 0.2, 0.3, 0.5, 1, 2.5)</code>. The stretch of lab 3.1 moves them and watches the estimate move.</p></aside>
+</section>
+
+<section class="slide" id="prediction-panel" data-lo="LO5">
+  <div class="kicker">The model's own signal</div>
+  <h2>The share of each label is the first sign that something changed</h2>
+  <div class="cols cols-3">
+    <div class="stat center"><div class="big">36%</div><div class="lbl">fast track in the training claims</div></div>
+    <div class="stat center"><div class="big">47%</div><div class="lbl">standard</div></div>
+    <div class="stat center"><div class="big">16%</div><div class="lbl">investigate</div></div>
+  </div>
+  <p class="small mt">The panel <code>sum by (version, label) (rate(rifd_predictions_total[1m]))</code> shows these shares live, per version. A canary whose shares differ by more than 10 points breaks one of Munira's rollback criteria on Day 4.</p>
+  <aside class="notes"><p>Shares of the labels in the 50,000 generated claims (fast track 36.6%, standard 47.2%, investigate 16.3%). Farz's own predictions on week 1 were 35% fast track, 45% standard and 20% investigate: a model does not reproduce the shares exactly, so the dashboard compares the model with itself over time and across versions.</p></aside>
+</section>
+
+<section class="slide" id="dashboard-as-code" data-lo="LO5">
+  <div class="kicker">Dashboards as code</div>
+  <h2>The dashboard is a file in the repository, reviewed like code</h2>
+  <div class="cols cols-2">
+    <ul class="bullets small">
+      <li><code>monitoring/dashboard.json</code>: four panels, each a PromQL query</li>
+      <li>Grafana loads it at start from <code>monitoring/grafana/</code> (provisioning)</li>
+      <li>The lab's check reads the file: a test of the dashboard</li>
+      <li>A change to a metric name breaks a test, not the on-call engineer's night</li>
+    </ul>
+    <div class="card c-teal"><h4>Four panels</h4><p class="small mb0">Requests a second by status; error ratio; p50, p95 and p99 of triage; predictions a second by version and label.</p></div>
+  </div>
+  <aside class="notes"><p>With a container runtime, <code>docker compose -f monitoring/compose.yaml up</code> starts Prometheus 3.16 and Grafana 13.2 with this dashboard; the course's own run could not start containers, so the lab uses <code>promlite</code>, which reads the same queries. Ask: who reviews a dashboard change in your team today?</p></aside>
+</section>
+
+<section class="slide" id="check-metrics" data-lo="LO5">
+  <div class="kicker">Checkpoint</div>
+  <h2>How do you get the service's 95th percentile?</h2>
+  <div class="quiz" data-type="single" data-lo="LO5">
+    <p class="lead">Farz runs four replicas. Each exposes its latency histogram. The dashboard must show the 95th percentile of all triage requests in the last minute. Which query is right?</p>
+    <div class="opts">
+      <div class="opt" data-why="Averaging four percentiles is not the percentile of the whole: a slow replica's tail is diluted">avg of histogram_quantile(0.95, …) computed for each replica</div>
+      <div class="opt" data-why="The largest of four percentiles overstates the service's percentile">max of histogram_quantile(0.95, …) over the replicas</div>
+      <div class="opt" data-why="The average of the observations hides the tail the objective is about">rate of the duration sum divided by the rate of the count</div>
+      <div class="opt" data-ok>histogram_quantile(0.95, sum by (le) (rate(…_bucket[1m])))</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> Bucket counts add up across replicas, so sum the rates by boundary first and estimate the percentile once.</div>
+  </div>
+  <aside class="notes"><p>Answer: D. Option C is the mean latency, a useful number but not the objective. If many choose A, draw two replicas, one slow and one fast, and show that the average of their 95th percentiles is not where 95% of all requests fall.</p></aside>
 </section>
 
 <section class="slide lab" id="lab-3-1" data-auto="lab" data-lab="3.1">
-  <aside class="notes">REPLACE: what to watch for while participants work, the typical problems, and the fallback for anyone who did not finish an earlier lab</aside>
+  <aside class="notes"><p>AI policy: tutor. Usual problems: forgetting <code>registry=self.registry</code>, so the metric lands in the global registry and tests see it twice; buckets passed as a list of strings; quoting the PromQL on Windows (use the single quotes as shown in Git Bash, or a file). Solution: <code>labs/solutions/S3_1.py</code>.</p></aside>
 </section>
 
 <!-- Session 2 -->
 
 <section class="slide section" id="s2" data-auto="section" data-session="2"></section>
 
-<section class="slide" id="s2-idea" data-lo="LO5">
-  <div class="kicker">REPLACE: the question this slide answers</div>
-  <h2>REPLACE: one idea, stated as a sentence</h2>
-  <div class="cols cols-2">
-    <ul class="bullets">
-      <li>REPLACE: at most six bullets, each a complete thought</li>
-      <li>REPLACE: bold the key phrase; numbers come from the lab run, not from memory</li>
-    </ul>
-    <div class="card c-teal"><h4>In the case study</h4><p class="small mb0">REPLACE: tie the idea to the case study and its data</p></div>
-  </div>
-  <div class="callout warn mt"><b>What goes wrong.</b> REPLACE: the failure participants will hit, and how to recognise it</div>
-  <aside class="notes">REPLACE: what to say, the demo to run, the question to ask the room, the common failure and its fix</aside>
+<section class="slide" id="structured-logs" data-lo="LO5">
+  <div class="kicker">Structured logs</div>
+  <h2>One JSON line per event, with the fields you will search on</h2>
+  <pre class="code s" data-file="runs/service.log"><code class="language-json">{"claim_id": "CLM-050017", "line": "health", "label": "investigate", "version": "1.0.0",
+ "event": "triage", "request_id": "bf97fe2e0dc94165", "level": "info", "timestamp": "2026-11-15T06:40:42Z"}
+{"method": "POST", "route": "/v1/triage", "status": 200, "ms": 28.37,
+ "event": "request", "request_id": "bf97fe2e0dc94165", "level": "info", "timestamp": "2026-11-15T06:40:42Z"}</code></pre>
+  <ul class="bullets small mt">
+    <li>The <b>request id</b> joins every line of one request, and the claims system's own log</li>
+    <li>Fields, not sentences: a query finds every investigate label of version 1.0.0</li>
+  </ul>
+  <aside class="notes"><p>Two lines from the course's run, with the timestamp shortened and the first claim id changed for the slide. structlog renders them; the request id is bound once per request with context variables, so code deep inside the service does not pass it around. Ask: if the claims system sent its own correlation id, what would you do with it? Log both.</p></aside>
 </section>
 
-<section class="slide" id="s2-steps" data-lo="LO5">
-  <div class="kicker">Step by step</div>
-  <h2>REPLACE: a process, shown one step per key press</h2>
-  <div class="flow">
-    <div class="step c-teal"><b>1 · REPLACE: name</b>REPLACE: what happens first</div>
-    <div class="arrow frag" data-frag="b">→</div><div class="step c-cyan frag" data-frag="b"><b>2 · REPLACE: name</b>REPLACE: the next piece</div>
-    <div class="arrow frag" data-frag="c">→</div><div class="step c-coral frag" data-frag="c"><b>3 · REPLACE: name</b>REPLACE: the result</div>
+<section class="slide" id="what-leaked" data-lo="LO5">
+  <div class="kicker">Lab 3.2 · step 1</div>
+  <h2>Half the start state's log lines held a national id or a mobile number</h2>
+  <div class="cols cols-12 mid">
+    <div class="stat center"><div class="big">200 / 401</div><div class="lbl">log lines with personal numbers after 200 claims</div></div>
+    <pre class="code s" data-file="src/rifd/app.py · start state"><code class="language-python">logs.get().info("triage", claim=claim.model_dump(),
+                label=out["label"], version=m.version)</code></pre>
   </div>
-  <div class="callout tip mt frag"><b>Takeaway.</b> REPLACE: the one sentence to remember</div>
-  <aside class="notes">Press once per step and say what each step adds before the next one appears. REPLACE: the example to walk through</aside>
+  <div class="callout warn mt"><b>What goes wrong.</b> Logging the whole object "for debugging" copies the member block into every log store, backup and search index.</div>
+  <aside class="notes"><p>Real count from the course's run: every triage line carried the member block. Under the Personal Data Protection Law a log is processing like any other: it needs a purpose, and triage logs have none for a national id. Ask where these logs would have gone: the log search tool, which on Day 2 the placement table kept inside the Kingdom for exactly this reason.</p></aside>
+</section>
+
+<section class="slide" id="redact-at-edge" data-lo="LO5">
+  <div class="kicker">Redaction</div>
+  <h2>Do not log it; then redact what slips through; then test both</h2>
+  <div class="flow">
+    <div class="step c-teal"><b>1 · Do not log it</b>log claim id, line, label, version: never the body</div>
+    <div class="arrow">→</div>
+    <div class="step c-amber"><b>2 · Redact</b>a logger processor masks national ids, mobiles and member fields</div>
+    <div class="arrow">→</div>
+    <div class="step c-navy"><b>3 · Test</b><code>tests/test_redaction.py</code> sends a claim and searches the log</div>
+  </div>
+  <div class="callout tip mt"><b>The first line is the defence.</b> A pattern cannot know every way personal data is written; not logging the body can.</div>
+  <aside class="notes"><p>The same rule applies to traces: no claim content in span attributes, only the request id. The test is what lets the dashboards and metrics go to the monitoring service: Bassam signs the placement on condition that it passes in every build.</p></aside>
+</section>
+
+<section class="slide" id="spans" data-lo="LO5">
+  <div class="kicker">Traces</div>
+  <h2>A trace is one request; each span is one step inside it</h2>
+  <div class="cols cols-2">
+    <table class="t small">
+      <tr><th>Span</th><th>Parent</th></tr>
+      <tr><td><code>POST /v1/triage</code></td><td>none: the root</td></tr>
+      <tr><td><code>fastapi.endpoint</code></td><td>the root</td></tr>
+      <tr><td><code>triage</code></td><td>fastapi.endpoint</td></tr>
+      <tr class="hl"><td><code>policy_lookup</code></td><td>triage</td></tr>
+      <tr><td><code>predict</code></td><td>triage</td></tr>
+    </table>
+    <ul class="bullets small">
+      <li>Every span has a trace id, its own id, its parent's id and a duration</li>
+      <li>OpenTelemetry writes them; the lab saves them to a file instead of a collector</li>
+      <li>The same code sends them over OTLP in production</li>
+    </ul>
+  </div>
+  <aside class="notes"><p>Parentage as the course's run recorded it. The root and the <code>fastapi.*</code> spans (endpoint, dependencies, serialisation) come from the instrumentation; <code>triage</code>, <code>policy_lookup</code> and <code>predict</code> are written in the service. In lab 3.2 the span around the policy lookup is missing, so its time hides inside <code>triage</code>: the lab puts it back and then looks for the slow step.</p></aside>
+</section>
+
+<section class="slide" id="slow-request" data-lo="LO5">
+  <div class="kicker">Lab 3.2 · step 3</div>
+  <h2>The slowest request spent its time waiting for the policy system</h2>
+  <div class="cols cols-2">
+    <div class="card c-coral tint"><h4>policy_lookup</h4><p class="small mb0">A 120 ms call to the policy system, made only for health claims outside the network: <b>7.0%</b> of 401 requests in the course's run.</p></div>
+    <div class="card c-teal tint"><h4>predict</h4><p class="small mb0">About 2 ms. Making the model faster would change nothing the caller feels.</p></div>
+  </div>
+  <div class="callout tip mt"><b>7% is more than 5%.</b> When more than one request in twenty takes the slow path, the 95th percentile falls inside it.</div>
+  <aside class="notes"><p>From the course's run. On the shared laptop of that run the 120 ms wait stretched to several hundred milliseconds under load, so the absolute times on your machines will differ; the shape will not. This is the bridge to session 3: a load test that never sends a health claim outside the network never sees this path.</p></aside>
+</section>
+
+<section class="slide" id="check-logs" data-lo="LO5">
+  <div class="kicker">Checkpoint</div>
+  <h2>Where should the national id stop?</h2>
+  <div class="quiz" data-type="single" data-lo="LO5">
+    <p class="lead">The fraud-review service logs each request body at debug level, and the log search tool hides the national id field in its display. A colleague says that is enough. What do you answer?</p>
+    <div class="opts">
+      <div class="opt" data-why="Debug logs get switched on in an incident, exactly when many people read them">It is enough while debug logging stays off in production</div>
+      <div class="opt" data-why="Hiding a field in the display leaves it stored, backed up and searchable">It is enough, because nobody sees the field</div>
+      <div class="opt" data-ok>It is not: the id is already stored; stop logging the body and test that no id reaches a log</div>
+      <div class="opt" data-why="Encrypting the store still keeps a copy that serves no purpose">Encrypt the log store and keep logging the body</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> Data that is never written cannot leak or be misused; a display filter acts after the copy exists.</div>
+  </div>
+  <aside class="notes"><p>Answer: C. Then ask what the test should do: send a claim with a known national id and assert that the number appears in no log line and no span, which is what <code>tests/test_redaction.py</code> does.</p></aside>
 </section>
 
 <section class="slide lab" id="lab-3-2" data-auto="lab" data-lab="3.2">
-  <aside class="notes">REPLACE: what to watch for while participants work, the typical problems, and the fallback for anyone who did not finish an earlier lab</aside>
+  <aside class="notes"><p>AI policy: tutor. Usual problems: leaving the old <code>runs/service.log</code> in place, so the check still finds the first run's personal data (delete it before the second run); binding the request id once at start instead of per request; a span opened but the lookup awaited outside it. Solution: <code>labs/solutions/S3_2.py</code>.</p></aside>
 </section>
 
 <!-- Session 3 -->
 
 <section class="slide section" id="s3" data-auto="section" data-session="3"></section>
 
-<section class="slide" id="s3-idea" data-lo="LO6">
-  <div class="kicker">REPLACE: the question this slide answers</div>
-  <h2>REPLACE: one idea, stated as a sentence</h2>
-  <div class="cols cols-2">
-    <ul class="bullets">
-      <li>REPLACE: at most six bullets, each a complete thought</li>
-      <li>REPLACE: bold the key phrase; numbers come from the lab run, not from memory</li>
-    </ul>
-    <div class="card c-teal"><h4>In the case study</h4><p class="small mb0">REPLACE: tie the idea to the case study and its data</p></div>
+<section class="slide" id="the-objective" data-lo="LO6">
+  <div class="kicker">The objective</div>
+  <h2>Munira's objective: 95% of claims answered within 150 ms at 200 a second</h2>
+  <div class="cols cols-3">
+    <div class="stat center"><div class="big">150 ms</div><div class="lbl">95th percentile, measured by the caller</div></div>
+    <div class="stat center"><div class="big">200 / s</div><div class="lbl">the peak after a sandstorm or a flood</div></div>
+    <div class="stat center"><div class="big">1%</div><div class="lbl">most errors allowed</div></div>
   </div>
-  <div class="callout warn mt"><b>What goes wrong.</b> REPLACE: the failure participants will hit, and how to recognise it</div>
-  <aside class="notes">REPLACE: what to say, the demo to run, the question to ask the room, the common failure and its fix</aside>
+  <p class="small mt">Written in <code>../data/objective.json</code> by the owner of the service, before anyone measured anything.</p>
+  <aside class="notes"><p>The objective belongs to the business, not to the engineers: Munira decided what a claims handler can wait for at the worst hour. "Measured by the caller" matters: the service's own histogram leaves out the network and the queue in front of it, so the load test measures from outside.</p></aside>
 </section>
 
-<section class="slide" id="s3-steps" data-lo="LO6">
-  <div class="kicker">Step by step</div>
-  <h2>REPLACE: a process, shown one step per key press</h2>
-  <div class="flow">
-    <div class="step c-teal"><b>1 · REPLACE: name</b>REPLACE: what happens first</div>
-    <div class="arrow frag" data-frag="b">→</div><div class="step c-cyan frag" data-frag="b"><b>2 · REPLACE: name</b>REPLACE: the next piece</div>
-    <div class="arrow frag" data-frag="c">→</div><div class="step c-coral frag" data-frag="c"><b>3 · REPLACE: name</b>REPLACE: the result</div>
+<section class="slide" id="open-closed" data-lo="LO6">
+  <div class="kicker">Two kinds of load</div>
+  <h2>Real callers do not wait for each other: test with an open load</h2>
+  <div class="cols cols-2">
+    <div class="card c-coral flat"><h4>Closed</h4><p class="small mb0">N users, each sends the next request after the last answer. When Farz slows, the test sends less, and the queue a real caller meets never forms.</p></div>
+    <div class="card c-teal flat"><h4>Open</h4><p class="small mb0">Requests leave on a schedule, 200 a second, whatever the answers do. A slowdown shows as a queue and a higher percentile.</p></div>
   </div>
-  <div class="callout tip mt frag"><b>Takeaway.</b> REPLACE: the one sentence to remember</div>
-  <aside class="notes">Press once per step and say what each step adds before the next one appears. REPLACE: the example to walk through</aside>
+  <div class="callout warn mt"><b>What goes wrong.</b> A closed test reports good percentiles exactly when the service is overloaded.</div>
+  <aside class="notes"><p>Gil Tene called the closed-loop bias "coordinated omission". <code>tools/loadtest.py</code> is open: requests leave on schedule from a thread pool. Locust with <code>constant_throughput(1)</code> per user is open only while each answer takes under a second; k6's constant-arrival-rate executor is open. On the course's Windows laptops Locust itself added latency, so the lab uses the course's tool and keeps Locust as an option.</p></aside>
+</section>
+
+<section class="slide" id="realistic-requests" data-lo="LO6">
+  <div class="kicker">Lab 3.3 · step 2</div>
+  <h2>One claim a hundred times a second is not Farz's traffic</h2>
+  <table class="t small">
+    <tr><th></th><th>loadtest/one_claim.csv</th><th>../data/replay/week1.csv</th></tr>
+    <tr><td>Claims</td><td>one motor claim</td><td>3,000 claims: motor, health, property</td></tr>
+    <tr><td>Calls the policy lookup</td><td>never</td><td>about 7% of claims</td></tr>
+    <tr class="hl"><td>What its 95th percentile measures</td><td>the fast path only</td><td>the path a claims handler waits on</td></tr>
+  </table>
+  <aside class="notes"><p>The supplied load test sends one claim, so it never meets the slow path that session 2's trace found. The fix is one argument: <code>--file ../data/replay/week1.csv</code>. Ask the room what else a realistic load test needs: the mix of lines and channels, the size of the descriptions, and the rate of the peak hour.</p></aside>
+</section>
+
+<section class="slide" id="warm-up-rates" data-lo="LO6">
+  <div class="kicker">Running it</div>
+  <h2>Warm up, then hold each rate long enough to count its tail</h2>
+  <pre class="code s" data-file="terminal"><code class="language-bash">uv run python tools/loadtest.py --rates 80 150 220 --seconds 20 --warmup 3 \
+  --file ../data/replay/week1.csv --label "1 worker" --out runs/load.json</code></pre>
+  <ul class="bullets small mt">
+    <li>The warm-up is not counted: first connections and caches are not the steady state</li>
+    <li>20 s at 150 a second is 3,000 requests: 150 of them are in the slowest 5%</li>
+    <li>Choose rates so that one holds the objective and one breaks it</li>
+  </ul>
+  <aside class="notes"><p>A 99th percentile from 200 requests is two requests: hold the rate longer before you quote it. The rates on the slide are those of the course's solution; on a slower laptop choose lower ones. Close other programs: a load generator and a service on one laptop compete for the same processors.</p></aside>
+</section>
+
+<section class="slide" id="the-knee" data-lo="LO6">
+  <div class="kicker">Reading the result</div>
+  <h2>Latency stays flat, then rises sharply: that bend is the capacity</h2>
+  <div class="flow">
+    <div class="step c-teal"><b>Below the knee</b>p95 set by the slow path, about 120 to 130 ms</div>
+    <div class="arrow">→</div>
+    <div class="step c-amber"><b>At the knee</b>requests start to queue; p95 climbs past 150 ms</div>
+    <div class="arrow">→</div>
+    <div class="step c-coral"><b>Above it</b>the achieved rate stops following the target</div>
+  </div>
+  <div class="callout tip mt"><b>Read three columns.</b> The 95th percentile, the error ratio, and whether the achieved rate kept up with the target.</div>
+  <aside class="notes"><p>In a quiet run of the course's solution, one worker carried about 160 requests a second with a 95th percentile between 126 and 150 ms; above that the objective broke. Later runs on the same laptop, shared with other heavy jobs, held the objective only at 40 a second, and the achieved rate stopped near 85: show participants that a load test measures the machine too, and that capacity must be measured on the hardware that will serve.</p></aside>
+</section>
+
+<section class="slide" id="check-load" data-lo="LO6">
+  <div class="kicker">Checkpoint</div>
+  <h2>What did this load test miss?</h2>
+  <div class="quiz" data-type="single" data-lo="LO6">
+    <p class="lead">A team load-tests the fraud-review service with 50 users, each sending the next request when the last answer arrives. The 95th percentile stays at 40 ms while the service's own histogram shows 400 ms in the same minute. What explains it?</p>
+    <div class="opts">
+      <div class="opt" data-ok>A closed load: users waited for slow answers, so fewer requests were sent and timed exactly when it slowed</div>
+      <div class="opt" data-why="The histogram measures inside the service; network time would make the caller's numbers larger, not smaller">The network between the test and the service</div>
+      <div class="opt" data-why="A warm-up affects the first seconds, not a whole minute">The test had no warm-up</div>
+      <div class="opt" data-why="Buckets make the estimate coarse, not ten times wrong in the other direction">The histogram buckets are too wide</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> In a closed test the callers slow down with the service, so the slow period contributes few requests and the percentile looks good.</div>
+  </div>
+  <aside class="notes"><p>Answer: A. Ask how to fix it: an open load at a fixed rate, or at least many more users each with a fixed throughput, and compare with the service's histogram.</p></aside>
 </section>
 
 <section class="slide lab" id="lab-3-3" data-auto="lab" data-lab="3.3">
-  <aside class="notes">REPLACE: what to watch for while participants work, the typical problems, and the fallback for anyone who did not finish an earlier lab</aside>
+  <aside class="notes"><p>AI policy: tutor. Usual problems: a server started with <code>--reload</code>, which halves throughput; using <code>localhost</code> on Windows, which can add about 200 ms per connection while it tries IPv6 first (use <code>127.0.0.1</code>); rates too high for the laptop, so nothing holds. Solution: <code>labs/solutions/S3_3.py</code>.</p></aside>
 </section>
 
 <!-- Session 4 -->
 
 <section class="slide section" id="s4" data-auto="section" data-session="4"></section>
 
-<section class="slide" id="s4-idea" data-lo="LO6">
-  <div class="kicker">REPLACE: the question this slide answers</div>
-  <h2>REPLACE: one idea, stated as a sentence</h2>
+<section class="slide" id="workers-replicas" data-lo="LO6">
+  <div class="kicker">Two ways to add capacity</div>
+  <h2>Workers share a container; replicas are containers of their own</h2>
   <div class="cols cols-2">
-    <ul class="bullets">
-      <li>REPLACE: at most six bullets, each a complete thought</li>
-      <li>REPLACE: bold the key phrase; numbers come from the lab run, not from memory</li>
-    </ul>
-    <div class="card c-teal"><h4>In the case study</h4><p class="small mb0">REPLACE: tie the idea to the case study and its data</p></div>
+    <div class="card c-navy flat"><h4>Workers</h4><p class="small mb0"><code>uvicorn --workers 2</code>: two Python processes in one container. Each holds its own copy of the model; together they use more than one processor.</p></div>
+    <div class="card c-teal flat"><h4>Replicas</h4><p class="small mb0"><code>replicas: 3</code>: three pods, which the cluster can place on different nodes and replace one at a time.</p></div>
   </div>
-  <div class="callout warn mt"><b>What goes wrong.</b> REPLACE: the failure participants will hit, and how to recognise it</div>
-  <aside class="notes">REPLACE: what to say, the demo to run, the question to ask the room, the common failure and its fix</aside>
+  <div class="callout tip mt"><b>One process per processor is the usual start.</b> Python runs one thread of Python code at a time per process, so a CPU-bound service scales with processes.</div>
+  <aside class="notes"><p>One more setting matters: <code>OMP_NUM_THREADS=1</code>, set in <code>rifd/__init__.py</code>. In the course's run, without it, farz 1.2.0's gradient boosting started a thread per core for every one-row prediction and took about 2 s per request on a busy laptop; with it, about 45 ms. The note is about CPython's global interpreter lock; free-threaded builds exist but the libraries Farz uses are not tested on them in this course. On a cluster, many teams run one worker per pod and scale replicas, so the cluster sees each process; lab 3.4 measures both ways on one laptop.</p></aside>
 </section>
 
-<section class="slide" id="s4-steps" data-lo="LO6">
-  <div class="kicker">Step by step</div>
-  <h2>REPLACE: a process, shown one step per key press</h2>
-  <div class="flow">
-    <div class="step c-teal"><b>1 · REPLACE: name</b>REPLACE: what happens first</div>
-    <div class="arrow frag" data-frag="b">→</div><div class="step c-cyan frag" data-frag="b"><b>2 · REPLACE: name</b>REPLACE: the next piece</div>
-    <div class="arrow frag" data-frag="c">→</div><div class="step c-coral frag" data-frag="c"><b>3 · REPLACE: name</b>REPLACE: the result</div>
+<section class="slide" id="headroom" data-lo="LO6">
+  <div class="kicker">From capacity to replicas</div>
+  <h2>Run each replica below its measured capacity, and keep one spare</h2>
+  <pre class="code s" data-file="tools/sizing.py"><code class="language-python">def replicas_needed(target_rps, capacity_rps, headroom, spare=1):
+    return math.ceil(target_rps / (capacity_rps * (1 - headroom))) + spare</code></pre>
+  <div class="cols cols-2 mt">
+    <div class="callout note small"><b>Headroom 30%.</b> A replica measured at 160 a second is planned at 112: bursts and a noisy neighbour stay inside the objective.</div>
+    <div class="callout note small"><b>One spare.</b> A rolling update or a lost node takes one replica away without breaking the objective.</div>
   </div>
-  <div class="callout tip mt frag"><b>Takeaway.</b> REPLACE: the one sentence to remember</div>
-  <aside class="notes">Press once per step and say what each step adds before the next one appears. REPLACE: the example to walk through</aside>
+  <aside class="notes"><p>Worked example with the quiet-run capacity: ceil(200 / 112) = 2, plus one spare: 3 replicas of one worker. Headroom and spares are Rifd's choices in the case study, written in the lab, not universal numbers. Ask: what would you change if the peak lasted only ten minutes a month?</p></aside>
+</section>
+
+<section class="slide" id="cost-per-1000" data-lo="LO6">
+  <div class="kicker">The price of a prediction</div>
+  <h2>Cost per 1,000 predictions makes two configurations comparable</h2>
+  <div class="cols cols-2">
+    <table class="t small">
+      <tr><th>Rifd's price sheet</th><th>SAR an hour</th></tr>
+      <tr><td>1 vCPU</td><td>0.19</td></tr>
+      <tr><td>1 GiB of memory</td><td>0.025</td></tr>
+      <tr><td>1 GPU</td><td>7.40</td></tr>
+    </table>
+    <div class="stack">
+      <p class="small mb0">Three replicas of one worker (1 vCPU, 0.25 GiB each): 3 × 0.19625 = <b>SAR 0.589 an hour</b>.</p>
+      <p class="small mb0">200 a second is 720,000 predictions an hour: <b>SAR 0.00082 per 1,000</b>.</p>
+    </div>
+  </div>
+  <aside class="notes"><p>The prices are invented for the course and labelled so in the data. Billing on requests, not on use, is how most hosting quotes containers. The arithmetic is the point: cost per hour divided by thousands of predictions per hour. Participants compute it for their own configurations in the lab.</p></aside>
+</section>
+
+<section class="slide" id="cpu-or-gpu" data-lo="LO6">
+  <div class="kicker">Processor or graphics processor?</div>
+  <h2>For Farz, a graphics processor would cost twelve times more and help nothing</h2>
+  <div class="cols cols-2">
+    <div class="stat center"><div class="big">SAR 0.0103</div><div class="lbl">per 1,000 predictions on one GPU replica alone, at 200 a second</div></div>
+    <ul class="bullets small">
+      <li>The model takes about a millisecond; the slow path is a 120 ms wait for another system</li>
+      <li>A logistic regression on ten features has little to run in parallel</li>
+      <li>Graphics processors pay off for large neural networks and batches</li>
+    </ul>
+  </div>
+  <aside class="notes"><p>7.40 / (200 × 3.6) = 0.0103 SAR per 1,000, against about 0.0008 for three CPU replicas: about twelve times more, before counting that one replica has no spare. The lesson is the order of questions: where does the time go (the trace), what does it cost (the sheet), then which hardware. AE-401 covers serving large language models, where the answer differs.</p></aside>
+</section>
+
+<section class="slide" id="check-sizing" data-lo="LO6">
+  <div class="kicker">Checkpoint</div>
+  <h2>How many replicas?</h2>
+  <div class="quiz" data-type="single" data-lo="LO6">
+    <p class="lead">One replica of the fraud-review service holds its objective up to 60 requests a second. The target is 150 a second. The team plans 20% headroom and one spare replica. How many replicas does it need?</p>
+    <div class="opts">
+      <div class="opt" data-why="Forgets the headroom or the spare: either one alone gives 4">4</div>
+      <div class="opt" data-ok>5</div>
+      <div class="opt" data-why="Counts the headroom as an extra replica on top of the spare">6</div>
+      <div class="opt" data-why="Forgets both: 150 / 60 rounds up to 3, each replica at over 80% of capacity and nothing spare">3</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> Each replica is planned at 60 × 0.8 = 48 a second, so 150 / 48 = 3.1, rounded up to 4, plus one spare: 5.</div>
+  </div>
+  <aside class="notes"><p>Answer: B. Option A is two different mistakes that land on the same number: without headroom 150 / 60 rounds up to 3, plus the spare is 4; with headroom but no spare it is also 4. Ask which of the two mistakes is worse during a rolling update.</p></aside>
 </section>
 
 <section class="slide lab" id="lab-3-4" data-auto="lab" data-lab="3.4">
-  <aside class="notes">REPLACE: what to watch for while participants work, the typical problems, and the fallback for anyone who did not finish an earlier lab</aside>
+  <aside class="notes"><p>AI policy: tutor. Usual problems: labels without the word "worker", which <code>sizing.py</code> needs to read the configuration; four workers on a laptop with four cores, which leaves nothing for the load generator; quoting the capacity of a run where the achieved rate did not keep up. Solution: <code>labs/solutions/S3_4.py</code>.</p></aside>
 </section>
 
-<section class="slide" id="wrap-up">
+<section class="slide" id="wrap-up" data-lo="LO5 LO6">
   <div class="kicker">Day 3 · wrap-up</div>
-  <h2>Three things to keep</h2>
+  <h2>Three things to keep from today</h2>
   <div class="cols cols-3">
-    <div class="card c-teal"><h4>Remember</h4><p class="small mb0">REPLACE: one idea participants keep</p></div>
-    <div class="card c-coral"><h4>Remember</h4><p class="small mb0">REPLACE: one idea participants keep</p></div>
-    <div class="card c-purple"><h4>Remember</h4><p class="small mb0">REPLACE: one idea participants keep</p></div>
+    <div class="card c-teal"><h4>Measure what callers feel</h4><p class="small mb0">Rate, errors, a latency histogram with buckets near the objective, and the label shares.</p></div>
+    <div class="card c-cyan"><h4>Never write what you must protect</h4><p class="small mb0">Log fields, not bodies; redact as a last defence; test it. Traces find the slow step.</p></div>
+    <div class="card c-coral"><h4>Size from a realistic open load</h4><p class="small mb0">Find the knee, plan below it with headroom and a spare, and price it per 1,000.</p></div>
   </div>
+  <aside class="notes"><p>Ask each participant which of their own services has a written latency objective. Tomorrow two new versions of Farz are released: one is promoted, one is rolled back on evidence, and four weeks of claims show drift.</p></aside>
 </section>
 
-<section class="slide dark" id="next" data-label="Next">
+<section class="slide dark" id="next" data-lo="LO7">
   <div class="kicker">Next</div>
-  <h2>Day 4: Release and watch</h2>
-  <p class="lead">REPLACE: what participants prepare before then; unfinished labs can be finished at home</p>
-  <aside class="notes">REPLACE: accounts, installs or reading participants need before the next unit</aside>
+  <h2>Day 4: release and watch</h2>
+  <ul class="bullets">
+    <li>A 10% canary of Farz 1.1.0, compared like with like</li>
+    <li>A faulty 1.2.0, rolled back within five minutes on written criteria</li>
+    <li>Drift in four weeks of claims, two alert rules and a runbook</li>
+  </ul>
+  <aside class="notes"><p>Tonight: read <code>../data/rollback_criteria.md</code> and decide what you would add. Lab 4.4's alert rules are written without AI help first.</p></aside>
 </section>

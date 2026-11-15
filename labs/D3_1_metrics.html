@@ -1,37 +1,59 @@
 <article class="lab" data-lab="3.1">
   <div class="box goal">
     <h3>Goal</h3>
-    <p>REPLACE: by the end, participants can …</p>
+    <p>Give Farz the metrics that answer three questions about every minute of service: how many requests, how many failed, how long they took, and what the model predicted. Then compute the 50th, 95th and 99th percentiles from the histogram, the way a dashboard does.</p>
   </div>
 
   <h2>What you need</h2>
   <ul>
-    <li>REPLACE: the files, the tool and the account the lab uses</li>
+    <li>The lab folder <code>rifd-labs/3.1</code>: <code>src/rifd/metrics.py</code> with TODOs, and <code>monitoring/dashboard.json</code> with two panels missing</li>
+    <li><code>tools/promlite.py</code>, a small stand-in for Prometheus that scrapes, records and answers the PromQL the course uses; <code>monitoring/compose.yaml</code> runs real Prometheus and Grafana if you have a container runtime</li>
+    <li>AI policy: tutor.</li>
   </ul>
 
   <div class="step">
-    <h3>REPLACE: the first step <span class="min">15 min</span></h3>
-    <p>REPLACE: what to do and why, in two sentences</p>
-    <div class="prompt" data-tool="Container runtime and image builder">REPLACE: the prompt participants copy, with the parts they change in <span class="ph">colour</span></div>
+    <h3>Add the counters and the latency histogram <span class="min">8 min</span></h3>
+    <p>In <code>src/rifd/metrics.py</code>, create <code>rifd_requests</code> (a counter by route and status), <code>rifd_request_duration_seconds</code> (a histogram by route with <code>BUCKETS</code>) and fill <code>observe()</code>. The middleware in <code>app.py</code> already calls it for every request.</p>
   </div>
 
   <div class="step">
-    <h3>REPLACE: the second step <span class="min">10 min</span></h3>
-    <p>REPLACE: what to do and why, in two sentences</p>
+    <h3>Add the prediction distribution <span class="min">4 min</span></h3>
+    <p>Create <code>rifd_predictions</code>, a counter by model, version and label, and fill <code>predicted()</code>. Never put a claim id or a member field in a label: each distinct value makes a new series.</p>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run uvicorn rifd.app:app --port 8000 &amp;
+curl -s -X POST 127.0.0.1:8000/v1/triage -H "content-type: application/json" -d @examples/motor.json
+curl -s 127.0.0.1:8000/metrics | grep ^rifd_</code></pre>
+  </div>
+
+  <div class="step">
+    <h3>Drive traffic and compute the percentiles <span class="min">7 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run python tools/promlite.py record --url http://127.0.0.1:8000/metrics --every 2 --for 40 --out runs/metrics.jsonl &amp;
+uv run python tools/replay.py --file ../data/replay/week1.csv --rate 60 --limit 1800 --out runs/replay.jsonl
+uv run python tools/promlite.py query --series runs/metrics.jsonl --last \
+  --expr 'histogram_quantile(0.95, sum by (le) (rate(rifd_request_duration_seconds_bucket{route="/v1/triage"}[30s])))'</code></pre>
+    <p>Repeat the query with 0.5 and 0.99, and once with <code>sum by (label) (rate(rifd_predictions_total[30s]))</code>. Stop the server.</p>
+  </div>
+
+  <div class="step">
+    <h3>Read the dashboard file; check <span class="min">6 min</span></h3>
+    <p>Open <code>monitoring/dashboard.json</code>. Add the 99th-percentile query to the latency panel and a fourth panel with predictions a second by version and label, then run the check.</p>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run ../lab.py check 3.1</code></pre>
   </div>
 
   <div class="step stretch">
     <h3>✱ Stretch</h3>
-    <p>REPLACE: an extension for those who finish early</p>
+    <p>Move the histogram buckets and see how far the estimated 95th percentile moves.</p>
   </div>
 
   <h2>Check yourself</h2>
   <ol class="checks">
-    <li>REPLACE: a question that shows the lab worked</li>
+    <li>Why can the 95th percentile of four replicas be computed from their buckets, but not by averaging their own 95th percentiles?</li>
+    <li>Which bucket boundary matters most for Munira's objective, and why?</li>
+    <li>Why is <code>claim_id</code> never a metric label?</li>
   </ol>
 
   <details class="instructor">
     <summary>For the trainer</summary>
-    <p>REPLACE: the answer key, the traps and the common errors</p>
+    <p>The check calls <code>/metrics</code> through a test client, looks for the three metric families and a bucket at 0.15 s, reads the dashboard file for a 99th-percentile query and the prediction panel, and queries the recording for a 95th percentile. In the course's run the replay of 1,800 claims at 60 a second gave predictions of about 19 standard, 15 fast track and 8 investigate a second at the end of the recording, close to the training shares.</p>
+    <p>Latency numbers from the course's run are not quoted here: the laptop was shared with other heavy jobs during that run, and the percentiles it gave (95th about 0.3 s in the service) are far above what the service shows on a quiet machine. Run this lab once on a room machine and put your own p50, p95 and p99 on the slide. Answers: buckets are counts and add up across replicas, percentiles do not; the boundary at 0.15 s, where the objective is judged; every new label value is a new time series, and a claim id would make one per claim. Solution: <code>labs/solutions/S3_1.py</code>.</p>
   </details>
 </article>

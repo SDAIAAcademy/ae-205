@@ -32,7 +32,7 @@ kubectl describe pod -l app=farz | tail -20</code></pre>
     <p>In <code>k8s/farz.yaml</code>: pin the image to <code>rifd/claims:1.0.0</code> with <code>imagePullPolicy: IfNotPresent</code>; add a <code>startupProbe</code> and a <code>readinessProbe</code> on <code>/readyz</code> and a <code>livenessProbe</code> on <code>/livez</code>; set requests and limits for memory and CPU; and take the key from the Secret with <code>valueFrom.secretKeyRef</code>.</p>
     <pre class="code" data-file="terminal"><code class="language-bash">kubectl apply -f k8s/farz.yaml
 kubectl rollout status deployment/farz
-kubectl port-forward service/farz 8000:80   # then: curl localhost:8000/readyz</code></pre>
+kubectl port-forward service/farz 8000:80   # then: curl 127.0.0.1:8000/readyz</code></pre>
   </div>
 
   <div class="step">

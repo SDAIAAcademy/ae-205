@@ -11,7 +11,6 @@ Files:
   price_sheet.json      Rifd's in-Kingdom hosting quote (invented prices)
   rollback_criteria.json, rollback_criteria.md   written before any release
   recordings/spike.jsonl   a recorded scrape series with an error spike (lab 4.4)
-  answer_key.json       what is planted, for the trainer
 """
 
 from __future__ import annotations
@@ -213,15 +212,6 @@ def main() -> None:
     rec.parent.mkdir(parents=True, exist_ok=True)
     rec.write_text("".join(json.dumps(s) + "\n" for s in spike_series()), encoding="utf-8")
     shares = {lab: round(sum(r["label"] == lab for r in history) / len(history), 4) for lab in LABELS}
-    (out / "answer_key.json").write_text(json.dumps({
-        "label_shares_history": shares,
-        "drift": {"amount_sar": "motor amounts x1.6 from week 3 (pooled over lines the PSI stays low; by line it is shifted)", "channel": "app share 45% to 70% from week 3",
-                  "policy_tenure_months": "+1 month from week 2: statistically detectable, practically negligible (the decoy)"},
-        "faulty_version": "farz 1.2.0: investigate threshold 0.05 in metadata.json (meant 0.50)",
-        "slow_path": "health claims outside the network call the policy lookup (about 120 ms)",
-        "secret_in_image": "lab 2.2 supplied Dockerfile sets RIFD_LOOKUP_KEY in an ENV line",
-        "vulnerable_pin": "lab 2.2 supplied lock pins h11 0.14.0 (GHSA-vqfr-h8mv-ghfj, critical; fixed in 0.16.0)"
-    }, indent=2) + "\n", encoding="utf-8")
     print(f"wrote {len(history)} claims, 4 replay weeks of 3000, label shares {shares}")
 
 

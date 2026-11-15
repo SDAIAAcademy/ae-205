@@ -27,7 +27,7 @@ uv run pytest tests/test_contract.py</code></pre>
     <h3>Return problem details for each error type <span class="min">8 min</span></h3>
     <p>In <code>src/rifd/errors.py</code>, write the two handlers marked TODO with the <code>problem()</code> helper: a validation error lists each failed field; a <code>ServiceError</code> keeps its own type. In <code>src/rifd/app.py</code>, move the route to <code>/v1/triage</code>, declare <code>response_model=Triage</code> and return the model's name and version with every answer.</p>
     <pre class="code" data-file="terminal"><code class="language-bash">uv run uvicorn rifd.app:app --port 8000 &amp;
-curl -s -X POST localhost:8000/v1/triage -H "content-type: application/json" \
+curl -s -X POST 127.0.0.1:8000/v1/triage -H "content-type: application/json" \
   -d '{"claim_id":"CLM-050123","line":"marine"}'</code></pre>
   </div>
 
