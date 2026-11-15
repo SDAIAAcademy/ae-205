@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-ax="lab" data-track="ai-engineering">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 2.4 · The similar-claims endpoint · Deploying AI Services: Containers, Serving and Monitoring</title>
+<meta name="generator" content="SDAIA Academy engine 1.0.0">
+<link rel="icon" href="../_engine/icon.svg">
+<link rel="alternate" type="text/markdown" href="D2_4_similar_claims.md">
+<link rel="describedby" href="../llms.txt">
+<link rel="stylesheet" href="../_engine/academy.css">
+</head>
+<body>
+<header>
+<div class="wrap">
+<div class="top"><div class="logo"></div><nav><a href="../index.html">Course page</a><a href="../slides/day2.html#lab-2-4">Back to the slides</a></nav></div>
+<span class="tag">Lab 2.4</span>
+<h1>The similar-claims endpoint</h1>
+<p>Add the similar-claims endpoint and compare its memory use and start-up time with the classifier.</p>
+<div class="meta"><span>25 minutes</span><span>Day 2</span><span>Session 4: Serving the embedding model</span></div>
+</div>
+</header>
+<main class="wrap">
+<article class="lab" data-lab="2.4">
+  <div class="box goal">
+    <h3>Goal</h3>
+    <p>Serve Shabih, which finds past claims like a new one, behind a versioned endpoint that returns no personal data, and measure how its memory and start-up compare with Farz to decide whether the two share a deployment.</p>
+  </div>
+
+  <h2>What you need</h2>
+  <ul>
+    <li>The lab folder <code>rifd-labs/2.4</code>, with the Shabih artefact in <code>models/shabih-1.0.0</code> and the tests <code>tests/test_similar.py</code></li>
+    <li><code>tools/measure.py</code>, which starts a service, times it to ready and reads its memory</li>
+    <li>AI policy: tutor.</li>
+  </ul>
+
+  <div class="step">
+    <h3>Read the Shabih artefact and its index <span class="min">4 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">cd rifd-labs/2.4
+cat models/shabih-1.0.0/metadata.json
+uv run python -c "import json; print(json.load(open('models/shabih-1.0.0/items.json'))[0])"</code></pre>
+    <p>The encoder turns a description into 96 numbers; the index holds one such vector for each of 50,000 past claims, and <code>items.json</code> says which claim each vector is, with no personal field.</p>
+  </div>
+
+  <div class="step">
+    <h3>Add /v1/similar with a contract and no personal fields <span class="min">9 min</span></h3>
+    <p>In <code>src/rifd/routes_similar.py</code>, replace the TODO: search the index with <code>m.search(query.description, k=query.k, line=query.line)</code> inside a span named <code>similar</code>, and answer with the <code>Similar</code> schema and the model's name and version.</p>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run pytest tests/test_similar.py
+RIFD_SERVICE=shabih uv run uvicorn rifd.app:app --port 8001 &amp;
+curl -s -X POST 127.0.0.1:8001/v1/similar -H "content-type: application/json" \
+  -d '{"description": "Windscreen cracked by a stone on the highway", "k": 3}'
+kill %1</code></pre>
+  </div>
+
+  <div class="step">
+    <h3>Measure memory and time to ready for both models <span class="min">7 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run python tools/measure.py --service farz &gt; runs/measure_farz.json
+uv run python tools/measure.py --service shabih &gt; runs/measure_shabih.json
+cat runs/measure_*.json</code></pre>
+    <p>Then write <code>k8s/shabih.yaml</code>: a deployment of its own with a memory limit sized from your measurement and a startup probe that waits long enough.</p>
+  </div>
+
+  <div class="step">
+    <h3>Check <span class="min">5 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run ../lab.py check 2.4</code></pre>
+  </div>
+
+  <div class="step stretch">
+    <h3>✱ Stretch</h3>
+    <p>Halve the index with float16 vectors and measure what it saves and what it changes in the results.</p>
+  </div>
+
+  <h2>Check yourself</h2>
+  <ol class="checks">
+    <li>Which of the two services takes longer to load its model, and by how much?</li>
+    <li>Give one reason to run Shabih in its own deployment even though it uses the same image.</li>
+    <li>A description can mention a person by name. What does the endpoint return about the neighbours, and what does it never return?</li>
+  </ol>
+
+  <details class="instructor">
+    <summary>For the trainer</summary>
+    <p>In the course's run on a laptop: Farz ready in 21.9 s (model load 60 ms, 184 MiB); Shabih ready in 18.7 s (model load 586 ms, 223 MiB, about 40 MiB more). Most of the time to ready is Python importing the libraries, not the models, and it varies by machine (11 to 22 s across the course's runs): read the load times for the model difference, and use the time to ready to set the startup probe. All 200 requests to each service answered 200.</p>
+    <p>Answers: Shabih loads about ten times slower and holds its index in memory, so it needs a larger memory limit and a longer startup probe, and it scales with search traffic rather than triage traffic; the endpoint returns claim id, line, incident type and a score, never names, national ids or descriptions. Solution: <code>labs/solutions/S2_4.py</code>.</p>
+  </details>
+</article>
+<nav class="pager"><a href="D2_3_local_cluster.html" rel="prev">← Previous lab</a><a href="D3_1_metrics.html" rel="next">Next lab →</a></nav>
+</main>
+<footer><div class="wrap">SDAIA Academy · AI Engineering Track · Deploying AI Services: Containers, Serving and Monitoring<br><span class="muted">Course version 2027.1.0 · engine 1.0.0 · built 2026-11-15 · commit fec8449</span></div></footer>
+<script type="application/json" id="academy-data">{"v":1,"engine":"1.0.0","build":{"at":"2026-11-15T09:27:24Z","version":"2027.1.0","commit":"fec8449"},"course":{"id":"ae-205","code":"AE-205","title":"Deploying AI Services: Containers, Serving and Monitoring","track":"ai-engineering","lang":"en","dir":"ltr","url":"https://sdaiaacademy.github.io/ae-205/","repo":"SDAIAAcademy/ae-205","home":"../index.html"},"lab":{"id":"2.4","title":"The similar-claims endpoint","summary":"Add the similar-claims endpoint and compare its memory use and start-up time with the classifier.","minutes":25,"day":2,"unit":"Day 2","session":4,"deck":"../slides/day2.html#lab-2-4","prev":"D2_3_local_cluster.html","next":"D3_1_metrics.html","alt":{}},"ai":{"context":{"course":"../context/course.md","courseJs":"../context/course.js","day":null,"llms":"../llms.txt"},"tasks":[],"tools":[]},"features":{},"strings":{}}</script>
+<script src="../_engine/academy.js"></script>
+</body>
+</html>

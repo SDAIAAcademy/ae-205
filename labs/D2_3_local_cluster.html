@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-ax="lab" data-track="ai-engineering">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 2.3 · Deploy to a local cluster · Deploying AI Services: Containers, Serving and Monitoring</title>
+<meta name="generator" content="SDAIA Academy engine 1.0.0">
+<link rel="icon" href="../_engine/icon.svg">
+<link rel="alternate" type="text/markdown" href="D2_3_local_cluster.md">
+<link rel="describedby" href="../llms.txt">
+<link rel="stylesheet" href="../_engine/academy.css">
+</head>
+<body>
+<header>
+<div class="wrap">
+<div class="top"><div class="logo"></div><nav><a href="../index.html">Course page</a><a href="../slides/day2.html#lab-2-3">Back to the slides</a></nav></div>
+<span class="tag">Lab 2.3</span>
+<h1>Deploy to a local cluster</h1>
+<p>Deploy the supplied service image to a single-node cluster with probes and resource limits, and decide where each service may run.</p>
+<div class="meta"><span>25 minutes</span><span>Day 2</span><span>Session 3: Running on a local cluster</span></div>
+</div>
+</header>
+<main class="wrap">
+<article class="lab" data-lab="2.3">
+  <div class="box goal">
+    <h3>Goal</h3>
+    <p>Run Farz on a single-node cluster with a pinned image, probes that match its two checks, and limits on memory and CPU, with the key supplied by a Secret. Then decide, for Farz, Shabih and the dashboards, where each may run under Rifd's data rules.</p>
+  </div>
+
+  <h2>What you need</h2>
+  <ul>
+    <li>The lab folder <code>rifd-labs/2.3</code>: <code>k8s/farz.yaml</code> as someone first wrote it, <code>k8s/config.yaml</code>, <code>k8s/kind.yaml</code> and <code>PLACEMENT.md</code></li>
+    <li>A single-node cluster: kind, k3d or minikube, with <code>kubectl</code>, and a container runtime. The folder holds the finished <code>Dockerfile</code>, so this lab does not need your image of lab 2.1</li>
+    <li>AI policy: tutor.</li>
+  </ul>
+
+  <div class="step">
+    <h3>Create the cluster and load the image <span class="min">5 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">cd rifd-labs/2.3
+docker build -t rifd/claims:1.0.0 .       # seconds if lab 2.1 built it: the layers are cached
+kind create cluster --name rifd --config k8s/kind.yaml
+kind load docker-image rifd/claims:1.0.0 --name rifd
+kubectl create secret generic rifd-lookup --from-file=key=secrets/lookup.key</code></pre>
+  </div>
+
+  <div class="step">
+    <h3>Apply the supplied manifest; read why it fails <span class="min">5 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">kubectl apply -f k8s/config.yaml -f k8s/farz.yaml
+kubectl get pods -l app=farz
+kubectl describe pod -l app=farz | tail -20</code></pre>
+    <p>Read the events at the bottom: the pods ask a registry for an image it does not have.</p>
+  </div>
+
+  <div class="step">
+    <h3>Add probes, limits and a pinned image <span class="min">7 min</span></h3>
+    <p>In <code>k8s/farz.yaml</code>: pin the image to <code>rifd/claims:1.0.0</code> with <code>imagePullPolicy: IfNotPresent</code>; add a <code>startupProbe</code> and a <code>readinessProbe</code> on <code>/readyz</code> and a <code>livenessProbe</code> on <code>/livez</code>; set requests and limits for memory and CPU; and take the key from the Secret with <code>valueFrom.secretKeyRef</code>.</p>
+    <pre class="code" data-file="terminal"><code class="language-bash">kubectl apply -f k8s/farz.yaml
+kubectl rollout status deployment/farz
+kubectl port-forward service/farz 8000:80   # then: curl 127.0.0.1:8000/readyz</code></pre>
+  </div>
+
+  <div class="step">
+    <h3>Fill the placement table for three services <span class="min">5 min</span></h3>
+    <p>In <code>PLACEMENT.md</code>, say for Farz, Shabih and the dashboards what each holds, its classification, where it may run and why, and who at Rifd signs the table.</p>
+  </div>
+
+  <div class="step">
+    <h3>Check <span class="min">3 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run ../lab.py check 2.3</code></pre>
+    <p>When you finish the day: <code>kind delete cluster --name rifd</code>.</p>
+  </div>
+
+  <div class="step stretch">
+    <h3>✱ Stretch</h3>
+    <p>Change the image tag and watch a rolling update replace the pods one at a time.</p>
+  </div>
+
+  <h2>Check yourself</h2>
+  <ol class="checks">
+    <li>Which event told you why the first pods did not start?</li>
+    <li>Why does the startup probe give Farz up to a minute when the readiness probe gives up after ten seconds?</li>
+    <li>The dashboards carry no claim content. What has to be true, and who has to agree, before they run outside the Kingdom?</li>
+  </ol>
+
+  <details class="instructor">
+    <summary>For the trainer</summary>
+    <p>The supplied manifest has <code>rifd/claims:latest</code> with <code>imagePullPolicy: Always</code>, so the pods sit in <code>ErrImagePull</code> and then <code>ImagePullBackOff</code>; it has no probes or limits and the key in plain text. The check reviews the manifest and, when a cluster answers, asks for ready replicas. The course's run had no cluster (kind, k3d and minikube were not installed and no container daemon ran), so the deployment was checked as a file only: rehearse the cluster steps on a room machine before the course.</p>
+    <p>A sound placement table: Farz and Shabih are Restricted (personal and health data, free-text descriptions) and stay on the in-Kingdom cluster; the metrics can be classified lower because they carry no personal data, by a written decision, and may go to the monitoring service only while the Day 3 redaction tests pass; logs stay in the Kingdom. Signed by Bassam Al-Jaber with Munira Al-Ajmi. The national rules give the levels and the transfer conditions; keeping Restricted data in the Kingdom is Rifd's own policy, not a quotation of the law. Solution: <code>labs/solutions/S2_3.py</code>.</p>
+  </details>
+</article>
+<nav class="pager"><a href="D2_2_scan_and_config.html" rel="prev">← Previous lab</a><a href="D2_4_similar_claims.html" rel="next">Next lab →</a></nav>
+</main>
+<footer><div class="wrap">SDAIA Academy · AI Engineering Track · Deploying AI Services: Containers, Serving and Monitoring<br><span class="muted">Course version 2027.1.0 · engine 1.0.0 · built 2026-11-15 · commit fec8449</span></div></footer>
+<script type="application/json" id="academy-data">{"v":1,"engine":"1.0.0","build":{"at":"2026-11-15T09:27:24Z","version":"2027.1.0","commit":"fec8449"},"course":{"id":"ae-205","code":"AE-205","title":"Deploying AI Services: Containers, Serving and Monitoring","track":"ai-engineering","lang":"en","dir":"ltr","url":"https://sdaiaacademy.github.io/ae-205/","repo":"SDAIAAcademy/ae-205","home":"../index.html"},"lab":{"id":"2.3","title":"Deploy to a local cluster","summary":"Deploy the supplied service image to a single-node cluster with probes and resource limits, and decide where each service may run.","minutes":25,"day":2,"unit":"Day 2","session":3,"deck":"../slides/day2.html#lab-2-3","prev":"D2_2_scan_and_config.html","next":"D2_4_similar_claims.html","alt":{}},"ai":{"context":{"course":"../context/course.md","courseJs":"../context/course.js","day":null,"llms":"../llms.txt"},"tasks":[],"tools":[]},"features":{},"strings":{}}</script>
+<script src="../_engine/academy.js"></script>
+</body>
+</html>

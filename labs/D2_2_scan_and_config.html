@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-ax="lab" data-track="ai-engineering">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 2.2 · Scan, fix, configure · Deploying AI Services: Containers, Serving and Monitoring</title>
+<meta name="generator" content="SDAIA Academy engine 1.0.0">
+<link rel="icon" href="../_engine/icon.svg">
+<link rel="alternate" type="text/markdown" href="D2_2_scan_and_config.md">
+<link rel="describedby" href="../llms.txt">
+<link rel="stylesheet" href="../_engine/academy.css">
+</head>
+<body>
+<header>
+<div class="wrap">
+<div class="top"><div class="logo"></div><nav><a href="../index.html">Course page</a><a href="../slides/day2.html#lab-2-2">Back to the slides</a></nav></div>
+<span class="tag">Lab 2.2</span>
+<h1>Scan, fix, configure</h1>
+<p>Scan a supplied image, fix one critical finding and move secrets out of the image into configuration.</p>
+<div class="meta"><span>25 minutes</span><span>Day 2</span><span>Session 2: Scanning and configuration</span></div>
+</div>
+</header>
+<main class="wrap">
+<article class="lab" data-lab="2.2">
+  <div class="box goal">
+    <h3>Goal</h3>
+    <p>Scan the image the claims team was given last quarter, fix its critical finding by moving to a fixed version, and take the lookup key out of the code and the image so that the runtime supplies it.</p>
+  </div>
+
+  <h2>What you need</h2>
+  <ul>
+    <li>The lab folder <code>rifd-labs/2.2</code>: <code>supplied/Dockerfile</code>, a lock file with an old <code>h11</code>, and a key written in <code>src/rifd/settings.py</code></li>
+    <li>A scanner: <code>pip-audit</code> (in the project's dev tools) scans the Python dependencies; Trivy or Grype also scan the image's system packages when a container runtime is available</li>
+    <li>AI policy: tutor.</li>
+  </ul>
+
+  <div class="step">
+    <h3>Scan the supplied image and read the report <span class="min">6 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">cd rifd-labs/2.2
+uv export --no-dev --no-hashes --frozen -o runs/requirements-audit.txt
+uv run pip-audit -r runs/requirements-audit.txt --no-deps --disable-pip --aliases --desc</code></pre>
+    <p>The supplied image installs exactly what <code>uv.lock</code> says, so this is the scan of its Python packages. With a container runtime, build the image and scan all of it, system packages included, with Trivy (<code>grype rifd/claims:supplied</code> does the same):</p>
+    <pre class="code" data-file="terminal"><code class="language-bash">docker build -f supplied/Dockerfile -t rifd/claims:supplied .
+trivy image --severity HIGH,CRITICAL rifd/claims:supplied</code></pre>
+    <p>For each finding, note the package, the advisory, its severity and the version that fixes it. Open the advisory and read which requests trigger it.</p>
+  </div>
+
+  <div class="step">
+    <h3>Fix the critical finding and scan again <span class="min">7 min</span></h3>
+    <p>In <code>pyproject.toml</code>, replace the pin on <code>h11</code> with a lower bound at the fixed version, then lock and scan again.</p>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv lock --upgrade-package h11
+uv export --no-dev --no-hashes --frozen -o runs/requirements-audit.txt
+uv run pip-audit -r runs/requirements-audit.txt --no-deps --disable-pip</code></pre>
+    <p>With a runtime, build the image again and repeat the <code>trivy image</code> scan: the h11 finding is gone, and what remains belongs to the base image.</p>
+  </div>
+
+  <div class="step">
+    <h3>Find the key in the image history <span class="min">4 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">grep -rn "rifd-lookup-key" src supplied
+# with a runtime: docker history --no-trunc rifd/claims:supplied | grep KEY</code></pre>
+    <p>Anyone who can pull the image can read it. Removing the line from a new image does not remove it from the old one, so the key is rotated as well.</p>
+  </div>
+
+  <div class="step">
+    <h3>Read the key from configuration instead <span class="min">5 min</span></h3>
+    <p>In <code>src/rifd/settings.py</code>, make <code>lookup_key</code> come from <code>_secret("RIFD_LOOKUP_KEY")</code>, which reads the environment or the file <code>secrets/lookup.key</code>. Take the key out of <code>supplied/Dockerfile</code> and put it in <code>secrets/lookup.key</code>, which git and the build both ignore.</p>
+  </div>
+
+  <div class="step">
+    <h3>Check <span class="min">3 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run ../lab.py check 2.2</code></pre>
+  </div>
+
+  <div class="step stretch">
+    <h3>✱ Stretch</h3>
+    <p>Scan the multi-stage image of lab 2.1 and compare the counts by severity.</p>
+  </div>
+
+  <h2>Check yourself</h2>
+  <ol class="checks">
+    <li>Two findings: one critical with a fixed version, one medium with none. Which do you fix today, and what do you record about the other?</li>
+    <li>Why is a lower bound (<code>h11&gt;=0.16</code>) in <code>pyproject.toml</code> and an exact version in <code>uv.lock</code> the right pair?</li>
+    <li>The key was in an image that was pushed. What must happen besides removing it?</li>
+  </ol>
+
+  <details class="instructor">
+    <summary>For the trainer</summary>
+    <p>In the course's run (15 November 2026) pip-audit 2.10.1 reported "2 known vulnerabilities in 1 package": the same advisory for <code>h11 0.14.0</code>, PYSEC-2026-348, printed twice, with the aliases GHSA-vqfr-h8mv-ghfj and CVE-2025-43859, rated critical by GitHub. It is a request-smuggling flaw in how h11 parses the line endings of chunked bodies, fixed in 0.16.0. Point out that the count is not the number of distinct flaws. After the fix the lock held h11 0.16.0 and pip-audit found none. Advisory databases change: run the scan the week before the course and update the counts on the lab slide.</p>
+    <p>The course's run did not build or scan the image itself (no container daemon), so Trivy's system-package findings were not seen; the Python findings are the ones the check depends on. Answers: fix the critical one and record the medium one with its advisory and a date to look again; the bound says what the project accepts, the lock says what was tested; rotate the key, because every copy of the old image still holds it. Solution: <code>labs/solutions/S2_2.py</code>.</p>
+  </details>
+</article>
+<nav class="pager"><a href="D2_1_multi_stage_image.html" rel="prev">← Previous lab</a><a href="D2_3_local_cluster.html" rel="next">Next lab →</a></nav>
+</main>
+<footer><div class="wrap">SDAIA Academy · AI Engineering Track · Deploying AI Services: Containers, Serving and Monitoring<br><span class="muted">Course version 2027.1.0 · engine 1.0.0 · built 2026-11-15 · commit fec8449</span></div></footer>
+<script type="application/json" id="academy-data">{"v":1,"engine":"1.0.0","build":{"at":"2026-11-15T09:27:24Z","version":"2027.1.0","commit":"fec8449"},"course":{"id":"ae-205","code":"AE-205","title":"Deploying AI Services: Containers, Serving and Monitoring","track":"ai-engineering","lang":"en","dir":"ltr","url":"https://sdaiaacademy.github.io/ae-205/","repo":"SDAIAAcademy/ae-205","home":"../index.html"},"lab":{"id":"2.2","title":"Scan, fix, configure","summary":"Scan a supplied image, fix one critical finding and move secrets out of the image into configuration.","minutes":25,"day":2,"unit":"Day 2","session":2,"deck":"../slides/day2.html#lab-2-2","prev":"D2_1_multi_stage_image.html","next":"D2_3_local_cluster.html","alt":{}},"ai":{"context":{"course":"../context/course.md","courseJs":"../context/course.js","day":null,"llms":"../llms.txt"},"tasks":[],"tools":[]},"features":{},"strings":{}}</script>
+<script src="../_engine/academy.js"></script>
+</body>
+</html>

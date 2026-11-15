@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-ax="lab" data-track="ai-engineering">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 3.1 · Rate, errors and latency · Deploying AI Services: Containers, Serving and Monitoring</title>
+<meta name="generator" content="SDAIA Academy engine 1.0.0">
+<link rel="icon" href="../_engine/icon.svg">
+<link rel="alternate" type="text/markdown" href="D3_1_metrics.md">
+<link rel="describedby" href="../llms.txt">
+<link rel="stylesheet" href="../_engine/academy.css">
+</head>
+<body>
+<header>
+<div class="wrap">
+<div class="top"><div class="logo"></div><nav><a href="../index.html">Course page</a><a href="../slides/day3.html#lab-3-1">Back to the slides</a></nav></div>
+<span class="tag">Lab 3.1</span>
+<h1>Rate, errors and latency</h1>
+<p>Expose request rate, error rate and latency histograms and graph the 50th, 95th and 99th percentiles.</p>
+<div class="meta"><span>25 minutes</span><span>Day 3</span><span>Session 1: Metrics that matter</span></div>
+</div>
+</header>
+<main class="wrap">
+<article class="lab" data-lab="3.1">
+  <div class="box goal">
+    <h3>Goal</h3>
+    <p>Give Farz the metrics that answer three questions about every minute of service: how many requests, how many failed, how long they took, and what the model predicted. Then compute the 50th, 95th and 99th percentiles from the histogram, the way a dashboard does.</p>
+  </div>
+
+  <h2>What you need</h2>
+  <ul>
+    <li>The lab folder <code>rifd-labs/3.1</code>: <code>src/rifd/metrics.py</code> with TODOs, and <code>monitoring/dashboard.json</code> with two panels missing</li>
+    <li><code>tools/promlite.py</code>, a small stand-in for Prometheus that scrapes, records and answers the PromQL the course uses; <code>monitoring/compose.yaml</code> runs real Prometheus and Grafana if you have a container runtime</li>
+    <li>AI policy: tutor.</li>
+  </ul>
+
+  <div class="step">
+    <h3>Add the counters and the latency histogram <span class="min">8 min</span></h3>
+    <p>In <code>src/rifd/metrics.py</code>, create <code>rifd_requests</code> (a counter by route and status), <code>rifd_request_duration_seconds</code> (a histogram by route with <code>BUCKETS</code>) and fill <code>observe()</code>. The middleware in <code>app.py</code> already calls it for every request.</p>
+  </div>
+
+  <div class="step">
+    <h3>Add the prediction distribution <span class="min">4 min</span></h3>
+    <p>Create <code>rifd_predictions</code>, a counter by model, version and label, and fill <code>predicted()</code>. Never put a claim id or a member field in a label: each distinct value makes a new series.</p>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run uvicorn rifd.app:app --port 8000 &amp;
+curl -s -X POST 127.0.0.1:8000/v1/triage -H "content-type: application/json" -d @examples/motor.json
+curl -s 127.0.0.1:8000/metrics | grep ^rifd_</code></pre>
+  </div>
+
+  <div class="step">
+    <h3>Drive traffic and compute the percentiles <span class="min">7 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run python tools/promlite.py record --url http://127.0.0.1:8000/metrics --every 2 --for 40 --out runs/metrics.jsonl &amp;
+uv run python tools/replay.py --file ../data/replay/week1.csv --rate 60 --limit 1800 --out runs/replay.jsonl
+uv run python tools/promlite.py query --series runs/metrics.jsonl --last \
+  --expr 'histogram_quantile(0.95, sum by (le) (rate(rifd_request_duration_seconds_bucket{route="/v1/triage"}[30s])))'</code></pre>
+    <p>Repeat the query with 0.5 and 0.99, and once with <code>sum by (label) (rate(rifd_predictions_total[30s]))</code>. Stop the server.</p>
+  </div>
+
+  <div class="step">
+    <h3>Read the dashboard file; check <span class="min">6 min</span></h3>
+    <p>Open <code>monitoring/dashboard.json</code>. Add the 99th-percentile query to the latency panel and a fourth panel with predictions a second by version and label, then run the check.</p>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run ../lab.py check 3.1</code></pre>
+  </div>
+
+  <div class="step stretch">
+    <h3>✱ Stretch</h3>
+    <p>Move the histogram buckets and see how far the estimated 95th percentile moves.</p>
+  </div>
+
+  <h2>Check yourself</h2>
+  <ol class="checks">
+    <li>Why can the 95th percentile of four replicas be computed from their buckets, but not by averaging their own 95th percentiles?</li>
+    <li>Which bucket boundary matters most for Munira's objective, and why?</li>
+    <li>Why is <code>claim_id</code> never a metric label?</li>
+  </ol>
+
+  <details class="instructor">
+    <summary>For the trainer</summary>
+    <p>The check calls <code>/metrics</code> through a test client, looks for the three metric families and a bucket at 0.15 s, reads the dashboard file for a 99th-percentile query and the prediction panel, and queries the recording for a 95th percentile. In the course's run the replay of 1,800 claims at 60 a second gave predictions of about 19 standard, 15 fast track and 8 investigate a second at the end of the recording, close to the training shares.</p>
+    <p>In the course's final run the recording gave, inside the service, a 50th percentile of 3 ms, a 95th of 112 ms and a 99th of 142 ms at 60 claims a second: the 95th and 99th fall in the slow policy-lookup path. An earlier run on the same laptop while other heavy jobs ran gave a 95th of about 300 ms, so run this lab once on a room machine and put your own numbers on the slide. Answers: buckets are counts and add up across replicas, percentiles do not; the boundary at 0.15 s, where the objective is judged; every new label value is a new time series, and a claim id would make one per claim. Solution: <code>labs/solutions/S3_1.py</code>.</p>
+  </details>
+</article>
+<nav class="pager"><a href="D2_4_similar_claims.html" rel="prev">← Previous lab</a><a href="D3_2_logs_traces.html" rel="next">Next lab →</a></nav>
+</main>
+<footer><div class="wrap">SDAIA Academy · AI Engineering Track · Deploying AI Services: Containers, Serving and Monitoring<br><span class="muted">Course version 2027.1.0 · engine 1.0.0 · built 2026-11-15 · commit fec8449</span></div></footer>
+<script type="application/json" id="academy-data">{"v":1,"engine":"1.0.0","build":{"at":"2026-11-15T09:27:24Z","version":"2027.1.0","commit":"fec8449"},"course":{"id":"ae-205","code":"AE-205","title":"Deploying AI Services: Containers, Serving and Monitoring","track":"ai-engineering","lang":"en","dir":"ltr","url":"https://sdaiaacademy.github.io/ae-205/","repo":"SDAIAAcademy/ae-205","home":"../index.html"},"lab":{"id":"3.1","title":"Rate, errors and latency","summary":"Expose request rate, error rate and latency histograms and graph the 50th, 95th and 99th percentiles.","minutes":25,"day":3,"unit":"Day 3","session":1,"deck":"../slides/day3.html#lab-3-1","prev":"D2_4_similar_claims.html","next":"D3_2_logs_traces.html","alt":{}},"ai":{"context":{"course":"../context/course.md","courseJs":"../context/course.js","day":null,"llms":"../llms.txt"},"tasks":[],"tools":[]},"features":{},"strings":{}}</script>
+<script src="../_engine/academy.js"></script>
+</body>
+</html>

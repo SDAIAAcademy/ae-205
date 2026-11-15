@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: rifd
+    folder: Rifd
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

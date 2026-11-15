@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-ax="lab" data-track="ai-engineering">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 4.1 · A 10% canary · Deploying AI Services: Containers, Serving and Monitoring</title>
+<meta name="generator" content="SDAIA Academy engine 1.0.0">
+<link rel="icon" href="../_engine/icon.svg">
+<link rel="alternate" type="text/markdown" href="D4_1_canary.md">
+<link rel="describedby" href="../llms.txt">
+<link rel="stylesheet" href="../_engine/academy.css">
+</head>
+<body>
+<header>
+<div class="wrap">
+<div class="top"><div class="logo"></div><nav><a href="../index.html">Course page</a><a href="../slides/day4.html#lab-4-1">Back to the slides</a></nav></div>
+<span class="tag">Lab 4.1</span>
+<h1>A 10% canary</h1>
+<p>Send 10% of traffic to a new version and compare its metrics with the current one.</p>
+<div class="meta"><span>25 minutes</span><span>Day 4</span><span>Session 1: Rolling, canary and shadow releases</span></div>
+</div>
+</header>
+<main class="wrap">
+<article class="lab" data-lab="4.1">
+  <div class="box goal">
+    <h3>Goal</h3>
+    <p>Release farz 1.1.0 to one claim in ten through a router, compare it with 1.0.0 on the same traffic (errors, latency, label shares and agreement with the labels that have arrived), and record a decision Munira can sign.</p>
+  </div>
+
+  <h2>What you need</h2>
+  <ul>
+    <li>The lab folder <code>rifd-labs/4.1</code> with both versions in <code>models/</code>, <code>tools/router.py</code>, <code>tools/compare.py</code> and an empty <code>RELEASE_LOG.md</code></li>
+    <li><code>../data/rollback_criteria.md</code>, written by Munira before the release, and the delayed labels <code>../data/replay/labels_week1.csv</code></li>
+    <li>Four terminals, or one with background jobs</li>
+    <li>AI policy: tutor.</li>
+  </ul>
+
+  <div class="step">
+    <h3>Start both versions and the router <span class="min">5 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">cd rifd-labs/4.1
+RIFD_MODEL_DIR=models/farz-1.0.0 uv run uvicorn rifd.app:app --host 127.0.0.1 --port 8001 --log-level warning &amp;
+RIFD_MODEL_DIR=models/farz-1.1.0 uv run uvicorn rifd.app:app --host 127.0.0.1 --port 8002 --log-level warning &amp;
+uv run python tools/router.py --stable http://127.0.0.1:8001 --canary http://127.0.0.1:8002 --weight 0.10 --port 8000 &amp;</code></pre>
+    <p>The router hashes the claim id, so a claim that is retried always reaches the same version.</p>
+  </div>
+
+  <div class="step">
+    <h3>Replay claims with 10% to the canary <span class="min">7 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run python tools/replay.py --file ../data/replay/week1.csv --url http://127.0.0.1:8000 --rate 60 --out runs/canary.jsonl</code></pre>
+  </div>
+
+  <div class="step">
+    <h3>Compare errors, latency and predictions <span class="min">8 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run python tools/compare.py runs/canary.jsonl --criteria ../data/rollback_criteria.json \
+  --labels ../data/replay/labels_week1.csv --stable 1.0.0 --canary 1.1.0 --json runs/compare.json</code></pre>
+    <p>Both versions answered claims from the same week at the same time: that is what makes the comparison fair. Note how many canary requests you judged.</p>
+  </div>
+
+  <div class="step">
+    <h3>Write the release log entry; check <span class="min">5 min</span></h3>
+    <p>Fill every row of <code>RELEASE_LOG.md</code> and stop the three servers.</p>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run ../lab.py check 4.1</code></pre>
+  </div>
+
+  <div class="step stretch">
+    <h3>✱ Stretch</h3>
+    <p>Run 1.1.0 in shadow instead: copy every request to it, return only 1.0.0's answer, and compare.</p>
+  </div>
+
+  <h2>Check yourself</h2>
+  <ol class="checks">
+    <li>Why compare the canary with the current version on the same hour of traffic, and not with last week's dashboard?</li>
+    <li>The canary agrees with the labels a little more often. Is that enough to promote it?</li>
+    <li>Who signs the decision, and what would have let the on-call engineer act without her?</li>
+  </ol>
+
+  <details class="instructor">
+    <summary>For the trainer</summary>
+    <p>In the course's final run the canary served 285 of 3,000 claims (9.5%), with no errors. Label shares were 35/44/20% for 1.0.0 and 33/50/18% for 1.1.0; agreement with the week 1 labels 72.8% and 74.0%. The 95th percentiles were 134.6 ms and 151.4 ms: the canary was 1.4 ms over the criterion, so the decision the criteria give is <b>roll back</b>, although 1.1.0 agrees with the labels slightly more often. A second full run on the same laptop gave 134.8 and 151.7 ms, so on that hardware the result is steady: 1.1.0 answers about 7 ms slower at the median (19.2 against 12.3 ms). Lab 4.2 does not continue from this decision: its start state has 1.1.0 in service. An earlier run on an overloaded laptop gave 961 and 366 ms. Expect cohorts to land on either side; discuss whether 285 requests are enough to judge a tail, and that the honest answer is to follow the criteria and, if Munira wishes, run the canary longer.</p>
+    <p>Answers: traffic changes by hour and by week, so only the same requests compare like with like; a small gain on a few hundred labelled claims is a reason to keep going, not proof, and the criteria are about doing no harm; Munira signs; a written criterion that fires lets the on-call engineer roll back first. Solution: <code>labs/solutions/S4_1.py</code>.</p>
+  </details>
+</article>
+<nav class="pager"><a href="D3_4_sizing_cost.html" rel="prev">← Previous lab</a><a href="D4_2_rollback.html" rel="next">Next lab →</a></nav>
+</main>
+<footer><div class="wrap">SDAIA Academy · AI Engineering Track · Deploying AI Services: Containers, Serving and Monitoring<br><span class="muted">Course version 2027.1.0 · engine 1.0.0 · built 2026-11-15 · commit fec8449</span></div></footer>
+<script type="application/json" id="academy-data">{"v":1,"engine":"1.0.0","build":{"at":"2026-11-15T09:27:24Z","version":"2027.1.0","commit":"fec8449"},"course":{"id":"ae-205","code":"AE-205","title":"Deploying AI Services: Containers, Serving and Monitoring","track":"ai-engineering","lang":"en","dir":"ltr","url":"https://sdaiaacademy.github.io/ae-205/","repo":"SDAIAAcademy/ae-205","home":"../index.html"},"lab":{"id":"4.1","title":"A 10% canary","summary":"Send 10% of traffic to a new version and compare its metrics with the current one.","minutes":25,"day":4,"unit":"Day 4","session":1,"deck":"../slides/day4.html#lab-4-1","prev":"D3_4_sizing_cost.html","next":"D4_2_rollback.html","alt":{}},"ai":{"context":{"course":"../context/course.md","courseJs":"../context/course.js","day":null,"llms":"../llms.txt"},"tasks":[],"tools":[]},"features":{},"strings":{}}</script>
+<script src="../_engine/academy.js"></script>
+</body>
+</html>

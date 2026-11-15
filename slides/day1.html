@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-ax="deck" data-track="ai-engineering">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Day 1 · Package and serve · Deploying AI Services: Containers, Serving and Monitoring</title>
+<meta name="generator" content="SDAIA Academy engine 1.0.0">
+<link rel="icon" href="../_engine/icon.svg">
+<link rel="alternate" type="text/markdown" href="day1.md">
+<link rel="describedby" href="../llms.txt">
+<link rel="stylesheet" href="../_engine/academy.css">
+</head>
+<body>
+<div class="deck" data-course="Deploying AI Services: Containers, Serving and Monitoring" data-track="ai-engineering" data-day="Day 1">
+<section class="slide title" id="title" data-auto="title" data-label="Welcome" data-n="1">
+  <div class="kicker">SDAIA Academy · Deploying AI Services: Containers, Serving and Monitoring</div>
+  <h1>Package and serve</h1>
+  <p class="lead mt">Day 1: From a notebook pickle to a versioned API that checks its inputs and says when it is ready</p>
+  <div class="meta"><span class="track">AI Engineering Track</span><span>4 teaching days + capstone day</span><span>4 sessions · 4 labs</span><span>AE-205</span></div>
+  <aside class="notes"><p>Welcome. Ask the room: who has had a model work in a notebook and fail somewhere else? Most hands go up; that gap is this course. The rhythm: four sessions a day, each about 25 minutes of ideas and a 25-minute lab. Labs run in a terminal on your laptop; container and cluster labs start tomorrow.</p><p>Check before the first lab that everyone has <code>git</code>, <code>uv</code> and a shell. The pre-work covered containers and HTTP; the entry quiz is done before this session, without AI help.</p></aside>
+</section>
+
+<section class="slide" id="agenda" data-auto="agenda" data-label="Agenda" data-n="2">
+  <div class="kicker">Today</div>
+  <h2>Package and serve</h2>
+  <div class="agenda"><div class="item"><div><b>Session 1 · From notebook to artefact</b><small>The path from a trained model to a served prediction, serialisation formats, signatures, pins and the decision logic that hides in a notebook</small></div></div><div class="item"><div><b>Session 2 · A registry for model versions</b><small>Immutable versions with metrics, tags and lineage, aliases for champion and challenger, and loading by version</small></div></div><div class="item"><div><b>Session 3 · A prediction API with a contract</b><small>Online, batch and streaming prediction, a contract written first, input validation, typed errors and a version in the path</small></div></div><div class="item"><div><b>Session 4 · Health, readiness and warm-up</b><small>Liveness and readiness as two questions, loading and warming the model at start, and what a service does when its model file is missing</small></div></div></div>
+</section>
+
+<section class="slide" id="meet-rifd" data-lo="LO1" data-n="3">
+  <div class="kicker">The case study</div>
+  <h2>Rifd's claims team wants two notebook models in service</h2>
+  <div class="cols cols-2">
+    <div class="stack">
+      <div class="card c-teal"><h4>Farz · triage</h4><p class="small mb0">Every new motor, health or property claim gets fast track, standard or investigate.</p></div>
+      <div class="card c-cyan"><h4>Shabih · similar claims</h4><p class="small mb0">An adjuster describes a claim and gets the five most similar past claims.</p></div>
+    </div>
+    <ul class="bullets small">
+      <li><b>Munira Al-Ajmi</b>, head of claims operations: owns the latency objective and decides rollbacks</li>
+      <li><b>Adel Al-Shaikh</b>, data scientist: trained both models in a notebook</li>
+      <li><b>Ghaida Al-Ruqi</b>, on-call platform engineer</li>
+      <li><b>Bassam Al-Jaber</b>, data protection officer</li>
+      <li><b>You</b>: the engineer who takes the models from the notebook to a monitored service</li>
+    </ul>
+  </div>
+  <aside class="notes"><p>Rifd Mutual Insurance is fictional; all 50,000 claims are generated with a fixed seed, and the names, national ids and mobile numbers in them are invented. Kholoud Al-Ghannam, a senior adjuster, appears on Day 2 as the user of Shabih.</p><p>Every lab starts from its own folder in the workspace, so a missed lab never blocks the next one.</p></aside>
+</section>
+
+<!-- Session 1 -->
+
+<section class="slide section" id="s1" data-auto="section" data-session="1" data-n="4">
+  <div class="kicker">Session 1</div>
+  <h1>From notebook to artefact</h1>
+  <ul class="bullets outcomes"><li>Name the artefact, image, registry, runtime, endpoint and monitor on a deployment path</li><li>Convert a notebook pickle into an artefact with a signature, pins and its decision rule</li><li>Prove an artefact by reloading it in a clean environment against reference predictions</li></ul>
+  <div class="sess-no">01</div>
+</section>
+
+<section class="slide" id="path-to-prediction" data-lo="LO1" data-n="5" data-session="1">
+  <div class="kicker">The path</div>
+  <h2>Six things stand between a trained model and a served prediction</h2>
+  <div class="flow">
+    <div class="step c-teal"><b>Artefact</b>the model, its signature, its pins</div>
+    <div class="arrow">→</div>
+    <div class="step c-cyan"><b>Registry</b>versions you can name</div>
+    <div class="arrow">→</div>
+    <div class="step c-purple"><b>Image</b>code, libraries, artefact</div>
+    <div class="arrow">→</div>
+    <div class="step c-amber"><b>Runtime</b>a cluster runs the image</div>
+    <div class="arrow">→</div>
+    <div class="step c-coral"><b>Endpoint</b>a versioned API</div>
+    <div class="arrow">→</div>
+    <div class="step c-navy"><b>Monitor</b>metrics, logs, traces</div>
+  </div>
+  <p class="lead mt">This course builds each box for Farz, one day at a time: artefact and endpoint today, image and runtime tomorrow, the monitor on Days 3 and 4.</p>
+  <aside class="notes"><p>This is LO1: by the end of the course a participant labels this diagram from memory with one sentence per box; the exit check asks for it. Walk the boxes left to right and ask, for each, "what breaks if this box is missing?" Without a registry nobody can say which model answered; without a monitor nobody knows it is wrong.</p></aside>
+</section>
+
+<section class="slide" id="the-handover" data-lo="LO2" data-n="6" data-session="1">
+  <div class="kicker">What you are given</div>
+  <h2>A notebook hand-over is a pickle, a script and a number</h2>
+  <div class="cols cols-2">
+    <div class="card c-teal flat"><h4>Adel hands over</h4><ul class="bullets small mb0"><li><code>farz_notebook.pkl</code>, the fitted pipeline</li><li><code>train_triage.py</code>, the notebook as a script</li><li>macro F1 0.728 on 10,000 held-out claims</li></ul></div>
+    <div class="card c-coral flat"><h4>Nobody wrote down</h4><ul class="bullets small mb0"><li>which library versions load it</li><li>which inputs it expects, with which types</li><li>what the claims team does with the probabilities</li></ul></div>
+  </div>
+  <div class="callout warn mt"><b>What goes wrong.</b> The model "works on my machine" because the machine is the missing documentation.</div>
+  <aside class="notes"><p>The F1 comes from the course's run of the notebook on the synthetic claims (the first 40,000 claims by day for training, the last 10,000 held out). Ask the room which of the three missing things they have been bitten by. Lab 1.1 finds the third one.</p></aside>
+</section>
+
+<section class="slide" id="serialisation-formats" data-lo="LO2" data-n="7" data-session="1">
+  <div class="kicker">Serialisation formats</div>
+  <h2>A model file is either data or a program</h2>
+  <table class="t small">
+    <tr><th>Format</th><th>What loading does</th><th>Portable across languages</th><th>Use it for</th></tr>
+    <tr><td>pickle, joblib</td><td>imports and calls whatever the file names</td><td>no</td><td>files you made yourself, once</td></tr>
+    <tr class="hl"><td>skops</td><td>rebuilds only types on a trusted list</td><td>no (Python, scikit-learn)</td><td>scikit-learn models you share</td></tr>
+    <tr><td>ONNX</td><td>reads a graph of operators</td><td>yes</td><td>serving outside Python</td></tr>
+    <tr><td>framework formats</td><td>weights plus a known architecture</td><td>within the framework</td><td>deep learning models</td></tr>
+  </table>
+  <aside class="notes"><p>The Python documentation warns that unpickling can run arbitrary code: never load a pickle from a source you do not trust. skops saves scikit-learn objects in a format that loads only types you approve. Farz uses skops from lab 1.1 on. Sources: Python pickle documentation; skops secure persistence.</p></aside>
+</section>
+
+<section class="slide" id="pickle-is-code" data-lo="LO2" data-n="8" data-session="1">
+  <div class="kicker">Lab 1.1 · step 2</div>
+  <h2>Read what a pickle imports before you load it</h2>
+  <pre class="code" data-file="terminal"><code class="language-bash">$ uv run python -m pickletools ../notebook/farz_notebook.pkl | grep sklearn
+sklearn.feature_extraction._dict_vectorizer
+sklearn.linear_model._logistic
+sklearn.pipeline
+sklearn.preprocessing._data</code></pre>
+  <div class="cols cols-2 mt">
+    <div class="callout tip small"><b>Load the pickle once,</b> where it was made or from someone you trust, and save it again in a safer format.</div>
+    <div class="callout note small"><b>skops says what it does not trust.</b> Farz 1.1.0, a boosted model, holds one type that is not on the default list; the course's loader accepts it by name.</div>
+  </div>
+  <aside class="notes"><p>Real output of the course's run (the list is shortened to the scikit-learn modules). The point is the habit, not this file: the four names are harmless, and a malicious file would name <code>os.system</code> instead. The type skops does not trust by default for gradient boosting is its tree predictor; <code>rifd.artefact</code> keeps a list of reviewed types and refuses any other.</p></aside>
+</section>
+
+<section class="slide" id="artefact-folder" data-lo="LO2" data-n="9" data-session="1">
+  <div class="kicker">An artefact</div>
+  <h2>Four files, each the answer to a question someone will ask</h2>
+  <div class="cols cols-2 gap-s">
+    <div class="card c-teal"><h4>model.skops</h4><p class="small mb0">What computes the probabilities? Saved so that loading runs no code.</p></div>
+    <div class="card c-cyan"><h4>signature.json</h4><p class="small mb0">What goes in and comes out? Ten input fields with types, three labels out.</p></div>
+    <div class="card c-purple"><h4>metadata.json</h4><p class="small mb0">Which version, which data, which decision rule, which sha256, which ten reference predictions?</p></div>
+    <div class="card c-amber"><h4>requirements.txt</h4><p class="small mb0">Which exact library versions load it? Six lines with <code>==</code>.</p></div>
+  </div>
+  <aside class="notes"><p>MLflow's model format has the same parts under other names: the model files, a signature, an input example and a requirements file. Ask: which file would the serving team read first? The signature: it is the contract between the model and the API they will write in session 3.</p></aside>
+</section>
+
+<section class="slide" id="hidden-decision-rule" data-lo="LO2" data-n="10" data-session="1">
+  <div class="kicker">Lab 1.1 · the planted problem</div>
+  <h2>The pickle alone reproduced 8 of the notebook's 10 predictions</h2>
+  <div class="cols cols-12 mid">
+    <div class="stat center"><div class="big">8 / 10</div><div class="lbl">reference predictions matched before the rule was exported</div></div>
+    <div class="stack">
+      <pre class="code s" data-file="notebook/train_triage.py · cell 14"><code class="language-python">INVESTIGATE_AT = <span class="hljs-number">0.30</span>
+
+<span class="hljs-keyword">def</span> <span class="hljs-title function_">label_from</span>(<span class="hljs-params">proba</span>):
+    <span class="hljs-keyword">if</span> proba[<span class="hljs-string">&quot;investigate&quot;</span>] &gt;= INVESTIGATE_AT:
+        <span class="hljs-keyword">return</span> <span class="hljs-string">&quot;investigate&quot;</span>
+    <span class="hljs-keyword">return</span> <span class="hljs-built_in">max</span>(proba, key=proba.get)</code></pre>
+      <p class="small mb0">CLM-041177: investigate 0.42, standard 0.57. The notebook says investigate; the pickle says standard.</p>
+    </div>
+  </div>
+  <aside class="notes"><p>Real numbers of the course's run of Lab 1.1. The decision rule is part of the model even though it is not in the model file: the artefact records it in <code>metadata.json</code> and the serving code applies it. Ask where else such rules hide: a threshold in a dashboard, a cap in a spreadsheet, a rounding in a report.</p></aside>
+</section>
+
+<section class="slide" id="pins-not-lock" data-lo="LO2" data-n="11" data-session="1">
+  <div class="kicker">Recap from FN-102, one step further</div>
+  <h2>The project's lock file and the artefact's pins answer different questions</h2>
+  <div class="cols cols-2">
+    <div class="card c-navy tint"><h4>uv.lock (FN-102)</h4><p class="small mb0">Every package of the project, for every platform: rebuilds the environment that develops and serves the service.</p></div>
+    <div class="card c-teal tint"><h4>requirements.txt of the artefact</h4><p class="small mb0">The six libraries that load this model file, at the versions that wrote it: <code>scikit-learn==1.9.1</code>, <code>numpy==2.5.4</code>, <code>skops==0.16.0</code> and three more.</p></div>
+  </div>
+  <div class="callout tip mt"><b>Proof, not belief.</b> An environment with only the pins must reproduce the ten reference predictions.</div>
+  <aside class="notes"><p>FN-102, Day 2, session 3 taught lock files; this is one slide of recap, not a lesson. The versions are those of the course's run in November 2026 and will differ in your cohort: that is the point of writing them down. A model saved by one scikit-learn version is not guaranteed to load, or to predict the same, in another.</p></aside>
+</section>
+
+<section class="slide" id="clean-reload" data-lo="LO2" data-n="12" data-session="1">
+  <div class="kicker">A reproducible build</div>
+  <h2>A clean environment holds the pins and nothing else</h2>
+  <pre class="code" data-file="terminal"><code class="language-bash">$ uv run --isolated --no-project --with-requirements artefacts/farz-1.0.0/requirements.txt \
+    python tools/check_reload.py artefacts/farz-1.0.0
+farz 1.0.0 loaded with pinned versions; 10 of 10 reference predictions match
+  ok CLM-047849  expected investigate  got investigate
+  ok CLM-049970  expected fast_track   got fast_track
+  ...</code></pre>
+  <aside class="notes"><p>Real output. <code>--isolated</code> makes uv build a fresh environment instead of reusing the project's, and <code>--no-project</code> keeps the project's own dependencies out, so the test proves the pins are enough. The loader also compares the running versions with the pins and refuses when they differ. This command is the evidence of LO2 in the capstone.</p></aside>
+</section>
+
+<section class="slide" id="check-artefact" data-lo="LO2" data-n="13" data-session="1">
+  <div class="kicker">Checkpoint</div>
+  <h2>What is missing from this artefact?</h2>
+  <div class="quiz" data-type="single" data-lo="LO2" data-id="check-artefact-q1">
+    <p class="lead">A colleague exports a churn model as model.skops, signature.json and requirements.txt with exact pins. A clean environment loads it and reproduces 7 of 10 reference predictions. The notebook ranked customers and called the top 5% at risk. What is missing?</p>
+    <div class="opts">
+      <div class="opt" data-why="Blames the format: skops loads the same fitted pipeline the notebook had" data-k="A">A safer format than skops</div>
+      <div class="opt" data-why="The pins are exact and the environment loaded them: versions are not the difference" data-k="B">Looser pins, so that the newest versions install</div>
+      <div class="opt" data-ok data-k="C">The decision rule: the top-5% cut-off that turned scores into labels</div>
+      <div class="opt" data-why="More reference claims would show the same gap more precisely, not close it" data-k="D">Twenty reference predictions instead of ten</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> The model file holds the scores; the notebook's rule that turns them into labels is part of the model and belongs in the artefact.</div>
+  </div>
+  <aside class="notes"><p>Answer: C. It is Lab 1.1's problem in another setting. If many pick B, return to the pins slide: exact pins are the fix for a different failure.</p></aside>
+</section>
+
+<section class="slide lab top" id="lab-1-1" data-auto="lab" data-lab="1.1" data-label="Lab 1.1" data-n="14" data-session="1">
+  <div class="cols cols-2 mid"><div><div class="lab-tag">Lab 1.1 · 25 min</div><h2>Export Farz as an artefact</h2><p class="lead small">Export the claims-triage model with its signature and pinned dependencies and reload it in a clean environment, reproducing ten reference predictions.</p><a class="nb" href="../labs/D1_1_export_artefact.html">D1_1_export_artefact.html</a></div><ul class="checklist"><li>Build the workspace and open lab 1.1 <span class="min">4 min</span></li><li>Load the notebook pickle and read what it needs <span class="min">5 min</span></li><li>Export with a signature, pins and the decision rule <span class="min">8 min</span></li><li>Reload in a clean environment; match ten predictions <span class="min">6 min</span></li><li>Check <span class="min">2 min</span></li><li class="stretch">✱ Stretch: Open the pickle with pickletools and list the imports it would run on load</li></ul></div>
+  <aside class="notes"><p>AI policy: tutor. The first four minutes build the workspace; start it during the checkpoint if the room is slow. Usual problems: a long-path error on Windows (set <code>UV_PROJECT_ENVIRONMENT</code> to a short folder), running the clean reload without <code>--isolated</code>, typing 0.3 instead of importing the constant. Solution: <code>labs/solutions/S1_1.py</code>.</p></aside>
+</section>
+
+<!-- Session 2 -->
+
+<section class="slide section" id="s2" data-auto="section" data-session="2" data-n="15">
+  <div class="kicker">Session 2</div>
+  <h1>A registry for model versions</h1>
+  <ul class="bullets outcomes"><li>Register a model version with metrics, a data hash and a commit</li><li>Explain why a registered version is never overwritten</li><li>Load a model by version and by alias and say when to use each</li></ul>
+  <div class="sess-no">02</div>
+</section>
+
+<section class="slide" id="why-registry" data-lo="LO2" data-n="16" data-session="2">
+  <div class="kicker">Why a registry</div>
+  <h2>A registry answers "which model gave this answer?" in one lookup</h2>
+  <ul class="bullets">
+    <li>An adjuster disputes a triage: which version scored that claim, trained on which data?</li>
+    <li>A canary misbehaves: what exactly changed between the two versions?</li>
+    <li>An auditor asks for the model that ran in March: can you load it today?</li>
+    <li>Two teams both say "the new model": are they talking about the same file?</li>
+  </ul>
+  <div class="callout warn mt"><b>What goes wrong.</b> A folder called <code>final_v2_really</code> on a shared drive answers none of these.</div>
+  <aside class="notes"><p>Each question is one Rifd will meet in the next four days: the dispute in Day 3's logs, the canary on Day 4, the audit in the runbook. Ask which of them the room can answer today for a model they own.</p></aside>
+</section>
+
+<section class="slide" id="versions-never-change" data-lo="LO2" data-n="17" data-session="2">
+  <div class="kicker">Lab 1.2 · step 3</div>
+  <h2>A registered version never changes</h2>
+  <pre class="code" data-file="terminal"><code class="language-bash">$ uv run python -m rifd.registry register --name farz --version 1.0.0 --from models/farz-1.1.0
+refused: farz 1.0.0 is already registered and versions never change:
+register farz with a new version</code></pre>
+  <p class="lead mt">A release log, a canary comparison and an incident note all say "farz 1.0.0". If the name could point at another file, none of them could be checked.</p>
+  <aside class="notes"><p>Real output of the course's run. The same rule holds in MLflow (a model version is immutable; you add a new one) and in a git repository of artefacts (a tag that is never moved). Retraining on more data is a new version, even when the code did not change.</p></aside>
+</section>
+
+<section class="slide" id="what-a-version-carries" data-lo="LO2" data-n="18" data-session="2">
+  <div class="kicker">Metrics and tags</div>
+  <h2>A version carries its evidence and its lineage</h2>
+  <table class="t small">
+    <tr><th>Field</th><th>Farz 1.0.0 in the course's run</th><th>Answers</th></tr>
+    <tr><td>sha256 of the model file</td><td><code>ee8e2221b179…</code></td><td>is this the file that was registered?</td></tr>
+    <tr><td>metrics</td><td>macro F1 0.728, investigate recall 0.746</td><td>how good was it when registered?</td></tr>
+    <tr><td>tag data_sha256</td><td>hash of <code>claims.csv</code></td><td>which data trained it?</td></tr>
+    <tr><td>tag trained_by</td><td>Adel Al-Shaikh</td><td>whom do I ask?</td></tr>
+    <tr><td>tag source</td><td><code>notebook/train_triage.py</code></td><td>which code made it?</td></tr>
+  </table>
+  <aside class="notes"><p>Real values from the course's registry after Lab 1.2. In a team, the source tag is a commit id rather than a file name. Say that metrics on a held-out set are a claim about the past; Day 4 measures the version on live traffic.</p></aside>
+</section>
+
+<section class="slide" id="two-versions" data-lo="LO2" data-n="19" data-session="2">
+  <div class="kicker">The two supplied versions</div>
+  <h2>1.1.0 is better than 1.0.0, but only just</h2>
+  <div class="bars">
+    <div class="row"><span>1.0.0 macro F1</span><div class="bar c-navy" style="--w:72.8%"></div><span class="val">0.728</span></div>
+    <div class="row"><span>1.1.0 macro F1</span><div class="bar c-teal" style="--w:73.5%"></div><span class="val">0.735</span></div>
+    <div class="row"><span>1.0.0 investigate recall</span><div class="bar c-navy" style="--w:74.6%"></div><span class="val">0.746</span></div>
+    <div class="row"><span>1.1.0 investigate recall</span><div class="bar c-teal" style="--w:74.7%"></div><span class="val">0.747</span></div>
+  </div>
+  <div class="callout note mt"><b>Decide on live evidence.</b> A gap this small on one held-out set does not justify a release by itself; Day 4's canary does.</div>
+  <aside class="notes"><p>Real metrics of the course's run on the 10,000 held-out claims. 1.0.0 is logistic regression; 1.1.0 is gradient boosting, 38 times larger on disk (1.9 MB against 50 KB) and slower to predict. Ask what Munira gains from a 0.007 better F1, and what she pays.</p></aside>
+</section>
+
+<section class="slide" id="aliases" data-lo="LO2" data-n="20" data-session="2">
+  <div class="kicker">Aliases</div>
+  <h2>An alias moves; a version does not</h2>
+  <div class="cols cols-2">
+    <div class="card c-teal"><h4>farz@champion → 1.0.0</h4><p class="small mb0">Moving the alias changes what every reader of the alias loads, with no deployment.</p></div>
+    <div class="card c-coral"><h4>farz 1.0.0</h4><p class="small mb0">Always the same file. A rollback is a change of one line in the manifest, and the manifest says what runs.</p></div>
+  </div>
+  <div class="callout tip mt"><b>Rifd's rule.</b> Production names a version; staging and the weekly batch may follow <code>champion</code>.</div>
+  <aside class="notes"><p>This is a design choice, and Rifd's rule is one reasonable answer. The other answer, production following an alias, makes releases fast and audits hard: the manifest no longer says which model ran. MLflow writes an alias as <code>models:/farz@champion</code>.</p></aside>
+</section>
+
+<section class="slide" id="registry-tools" data-lo="LO2" data-n="21" data-session="2">
+  <div class="kicker">The same ideas, other tools</div>
+  <h2>Folder registry, MLflow and git tags share one model</h2>
+  <table class="t small">
+    <tr><th>Idea</th><th>rifd.registry (the labs)</th><th>MLflow</th><th>Git repository of artefacts</th></tr>
+    <tr><td>A model</td><td><code>--name farz</code></td><td>registered model</td><td>a folder</td></tr>
+    <tr><td>A version</td><td><code>--version 1.0.0</code></td><td>model version</td><td>an annotated tag</td></tr>
+    <tr><td>Evidence</td><td>metrics, tags</td><td>run metrics, tags</td><td>files in the commit</td></tr>
+    <tr><td>A pointer that moves</td><td>alias</td><td>alias</td><td>a branch or a file of aliases</td></tr>
+  </table>
+  <aside class="notes"><p>The labs use a folder registry of about 150 lines so that participants can read all of it. MLflow adds a server, a user interface and run tracking; check its current documentation before using it, because its interfaces change between major versions. Sources: MLflow model registry documentation.</p></aside>
+</section>
+
+<section class="slide" id="lineage" data-lo="LO1 LO2" data-n="22" data-session="2">
+  <div class="kicker">Lineage</div>
+  <h2>From one prediction back to the data, in four hops</h2>
+  <div class="flow">
+    <div class="step c-coral"><b>A response</b><code>"model": {"version": "1.0.0"}</code></div>
+    <div class="arrow">→</div>
+    <div class="step c-cyan"><b>The registry</b>farz 1.0.0, sha256</div>
+    <div class="arrow">→</div>
+    <div class="step c-purple"><b>The tags</b>data_sha256, source</div>
+    <div class="arrow">→</div>
+    <div class="step c-teal"><b>The data</b><code>claims.csv</code>, 40,000 rows</div>
+  </div>
+  <p class="lead mt">Session 3 puts the version in every response, so the first hop is always there.</p>
+  <aside class="notes"><p>Ask which hop breaks most often in practice: usually the last, because the data was a query result nobody saved. Hashing the training file at registration closes it. AE-305 builds full retraining pipelines with lineage on top of this.</p></aside>
+</section>
+
+<section class="slide" id="check-registry" data-lo="LO2" data-n="23" data-session="2">
+  <div class="kicker">Checkpoint</div>
+  <h2>Retrained on one more month</h2>
+  <div class="quiz" data-type="single" data-lo="LO2" data-id="check-registry-q1">
+    <p class="lead">Adel retrains Farz 1.0.0 with the same code on one more month of claims. Production names farz 1.0.0 in its manifest. What should be registered?</p>
+    <div class="opts">
+      <div class="opt" data-ok data-k="A">A new version, 1.0.1 or 1.1.0, with the new data hash, while production keeps 1.0.0</div>
+      <div class="opt" data-why="Treats a version as a slot to refresh: production would change model with no release" data-k="B">The new file as 1.0.0, so production picks it up</div>
+      <div class="opt" data-why="Thinks lineage is only about code: the data changed, so the model did" data-k="C">Nothing: the code did not change</div>
+      <div class="opt" data-why="An alias move with no new version leaves no record of what the new file is" data-k="D">Move the champion alias to the new file</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> New data makes a new model; a new model is a new version with its own evidence, released on purpose.</div>
+  </div>
+  <aside class="notes"><p>Answer: A. Whether it is 1.0.1 or 1.1.0 is a team convention; say Rifd bumps the middle number when the data changes and the last when only the export changes.</p></aside>
+</section>
+
+<section class="slide lab top" id="lab-1-2" data-auto="lab" data-lab="1.2" data-label="Lab 1.2" data-n="24" data-session="2">
+  <div class="cols cols-2 mid"><div><div class="lab-tag">Lab 1.2 · 25 min</div><h2>Register two versions</h2><p class="lead small">Register two supplied model versions with metrics and tags and load one by version.</p><a class="nb" href="../labs/D1_2_registry.html">D1_2_registry.html</a></div><ul class="checklist"><li>Read the two supplied artefacts and their metrics <span class="min">4 min</span></li><li>Register 1.0.0 and 1.1.0 with tags and a data hash <span class="min">8 min</span></li><li>Try to overwrite 1.0.0 and read the refusal <span class="min">3 min</span></li><li>Set the champion alias; load by version and by alias <span class="min">7 min</span></li><li>Check <span class="min">3 min</span></li><li class="stretch">✱ Stretch: Write the same two registrations as MLflow calls, or as git tags on an artefact repository</li></ul></div>
+  <aside class="notes"><p>AI policy: tutor. Usual problems: hashing the wrong file; a tag with a space and no quotes; Windows shells without <code>sha256sum</code> (the page gives the PowerShell line). Solution: <code>labs/solutions/S1_2.py</code>.</p></aside>
+</section>
+
+<!-- Session 3 -->
+
+<section class="slide section" id="s3" data-auto="section" data-session="3" data-n="25">
+  <div class="kicker">Session 3</div>
+  <h1>A prediction API with a contract</h1>
+  <ul class="bullets outcomes"><li>Choose online, batch or streaming prediction for a use case</li><li>Validate a request against a written contract before the model sees it</li><li>Return typed errors that a caller can act on</li></ul>
+  <div class="sess-no">03</div>
+</section>
+
+<section class="slide" id="serving-patterns" data-lo="LO3" data-n="26" data-session="3">
+  <div class="kicker">Serving patterns</div>
+  <h2>Online, batch or streaming: the caller decides</h2>
+  <table class="t small">
+    <tr><th>Pattern</th><th>The caller</th><th>At Rifd</th><th>What matters</th></tr>
+    <tr class="hl"><td>Online</td><td>waits for the answer</td><td>Farz triages a claim as it is filed</td><td>latency, availability</td></tr>
+    <tr><td>Batch</td><td>reads the results later</td><td>every night, re-score open claims for the weekly review</td><td>throughput, cost, completeness</td></tr>
+    <tr><td>Streaming</td><td>an event arrives, a result is published</td><td>score each claim update from the claims system's event queue</td><td>ordering, back-pressure, duplicates</td></tr>
+  </table>
+  <aside class="notes"><p>Farz is online: the claims system calls it while a person waits. The same artefact can serve all three; the service around it differs. Ask the room for one use case of each in their own work.</p></aside>
+</section>
+
+<section class="slide" id="contract-first" data-lo="LO3" data-n="27" data-session="3">
+  <div class="kicker">Contract first</div>
+  <h2>Write the contract before the code, and test the code against it</h2>
+  <div class="cols cols-2">
+    <pre class="code s" data-file="CONTRACT.md (excerpt)"><code class="language-markdown">| amount<span class="hljs-emphasis">_sar        | number  | over 0, up to 5,000,000 |
+| vehicle_</span>age<span class="hljs-emphasis">_years | integer | 0 to 60; motor: needed  |
+| in_</span>network        | boolean | health: needed          |
+| member            | object  | never sent to the model,
+<span class="hljs-code">                                never logged            |</span></code></pre>
+    <ul class="bullets small">
+      <li>Agreed with the claims system's team: they build against it while you build the service</li>
+      <li>Every rule becomes a test in <code>tests/test_contract.py</code></li>
+      <li>A change that breaks a caller is a new major version of the path</li>
+    </ul>
+  </div>
+  <aside class="notes"><p>The full contract is in each lab folder as <code>CONTRACT.md</code>. Point out the member line: personal data arrives with the claim because the claims system sends whole records; the contract says what happens to it. That is a decision Bassam, the data protection officer, signed.</p></aside>
+</section>
+
+<section class="slide" id="validate-before-model" data-lo="LO3" data-n="28" data-session="3">
+  <div class="kicker">Input validation</div>
+  <h2>Every field is checked before the model sees it</h2>
+  <pre class="code s" data-file="src/rifd/schemas.py"><code class="language-python"><span class="hljs-keyword">class</span> <span class="hljs-title class_">Claim</span>(<span class="hljs-title class_ inherited__">BaseModel</span>):
+    model_config = ConfigDict(extra=<span class="hljs-string">&quot;forbid&quot;</span>)
+    line: <span class="hljs-type">Literal</span>[<span class="hljs-string">&quot;motor&quot;</span>, <span class="hljs-string">&quot;health&quot;</span>, <span class="hljs-string">&quot;property&quot;</span>]
+    amount_sar: <span class="hljs-built_in">float</span> = Field(gt=<span class="hljs-number">0</span>, le=<span class="hljs-number">5_000_000</span>)
+    vehicle_age_years: <span class="hljs-built_in">int</span> | <span class="hljs-literal">None</span> = Field(default=<span class="hljs-literal">None</span>, ge=<span class="hljs-number">0</span>, le=<span class="hljs-number">60</span>)
+
+<span class="hljs-meta">    @model_validator(<span class="hljs-params">mode=<span class="hljs-string">&quot;after&quot;</span></span>)</span>
+    <span class="hljs-keyword">def</span> <span class="hljs-title function_">by_line</span>(<span class="hljs-params">self</span>):
+        <span class="hljs-keyword">if</span> <span class="hljs-variable language_">self</span>.line == <span class="hljs-string">&quot;motor&quot;</span> <span class="hljs-keyword">and</span> <span class="hljs-variable language_">self</span>.vehicle_age_years <span class="hljs-keyword">is</span> <span class="hljs-literal">None</span>:
+            <span class="hljs-keyword">raise</span> ValueError(<span class="hljs-string">&quot;a motor claim needs vehicle_age_years&quot;</span>)
+        <span class="hljs-keyword">return</span> <span class="hljs-variable language_">self</span></code></pre>
+  <aside class="notes"><p>A model given a negative amount or an unknown line still returns a probability: models do not refuse bad input, so the service must. <code>extra="forbid"</code> refuses a field the contract does not know, because a caller who sends it believes it has an effect. The rule across fields is a model validator that raises <code>ValueError</code>, which FastAPI turns into a validation error.</p></aside>
+</section>
+
+<section class="slide" id="typed-errors" data-lo="LO3" data-n="29" data-session="3">
+  <div class="kicker">Typed errors</div>
+  <h2>A caller switches on the error's type, never on its text</h2>
+  <table class="t small">
+    <tr><th>type</th><th class="num">status</th><th>The caller</th></tr>
+    <tr><td><code>validation-error</code></td><td class="num">422</td><td>fixes the claim; never retries it as it is</td></tr>
+    <tr><td><code>model-unavailable</code></td><td class="num">503</td><td>retries later, or sends the claim to manual triage</td></tr>
+    <tr><td><code>dependency-failed</code></td><td class="num">502</td><td>retries later</td></tr>
+    <tr><td><code>prediction-failed</code></td><td class="num">500</td><td>reports the request id</td></tr>
+  </table>
+  <div class="callout warn mt"><b>What goes wrong.</b> A 200 with <code>"error": "bad input"</code> in the body: every dashboard counts it as a success.</div>
+  <aside class="notes"><p>The types are URNs (<code>urn:rifd:problem:validation-error</code>) so that they cannot be mistaken for a web page. The warning matters on Day 3: an error hidden in a 200 is invisible to the error-rate metric and to the alert.</p></aside>
+</section>
+
+<section class="slide" id="problem-details" data-lo="LO3" data-n="30" data-session="3">
+  <div class="kicker">Problem details</div>
+  <h2>One shape for every error: RFC 9457</h2>
+  <pre class="code s" data-file="422 · application/problem+json"><code class="language-json"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;urn:rifd:problem:validation-error&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;title&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;The claim does not match the contract&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;status&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">422</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;detail&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;1 field(s) failed validation&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;instance&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;/v1/triage&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;errors&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;field&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;line&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;message&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Input should be &#x27;motor&#x27;, &#x27;health&#x27; or &#x27;property&#x27;&quot;</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;request_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;3f1c9a0d7e2b4c55&quot;</span>
+<span class="hljs-punctuation">}</span></code></pre>
+  <aside class="notes"><p>RFC 9457, Problem Details for HTTP APIs, defines <code>type</code>, <code>title</code>, <code>status</code>, <code>detail</code> and <code>instance</code> and allows extra members such as <code>errors</code>. The request id lets the caller and the on-call engineer find the same request in the logs on Day 3. Sources: RFC 9457.</p></aside>
+</section>
+
+<section class="slide" id="versioned-path" data-lo="LO3" data-n="31" data-session="3">
+  <div class="kicker">Versions in two places</div>
+  <h2>The path carries the contract's version; the body carries the model's</h2>
+  <div class="cols cols-2">
+    <div class="card c-navy"><h4>/v1/triage</h4><p class="small mb0">Changes only when the contract breaks a caller. <code>/v2/</code> runs beside <code>/v1/</code> until every caller has moved.</p></div>
+    <div class="card c-teal"><h4>"model": {"version": "1.1.0"}</h4><p class="small mb0">Changes with every release, contract unchanged. The first hop of lineage, and the field Day 4's canary comparison groups by.</p></div>
+  </div>
+  <aside class="notes"><p>Ask: a new model needs one extra input field. Is that /v2? Only if callers must send it; an optional field with a default keeps /v1. Keep the two version numbers apart: mixing them forces a contract change for every retraining.</p></aside>
+</section>
+
+<section class="slide" id="personal-fields-dropped" data-lo="LO3" data-n="32" data-session="3">
+  <div class="kicker">Personal data at the boundary</div>
+  <h2>The member's details are validated, then dropped before the model</h2>
+  <div class="flow">
+    <div class="step c-navy"><b>Request</b>claim + description + member</div>
+    <div class="arrow">→</div>
+    <div class="step c-cyan"><b>Validated</b>national id: 10 digits, starts 1 or 2</div>
+    <div class="arrow">→</div>
+    <div class="step c-teal"><b>model_view()</b>the claim without member and text</div>
+    <div class="arrow">→</div>
+    <div class="step c-purple"><b>Farz</b>ten fields</div>
+  </div>
+  <div class="callout tip mt"><b>Data minimisation in code.</b> What the model never receives, no model log or trace can leak.</div>
+  <aside class="notes"><p>The Personal Data Protection Law asks controllers to limit personal data to what the purpose needs; here the purpose is triage, which needs none of the member's details. Bassam's decision is enforced by one method, <code>model_view()</code>, and tested. Day 3 removes the same fields from logs. Sources: Personal Data Protection Law (SDAIA).</p></aside>
+</section>
+
+<section class="slide" id="contract-tests" data-lo="LO3" data-n="33" data-session="3">
+  <div class="kicker">Lab 1.3</div>
+  <h2>Sixteen contract tests, from all failing to all passing</h2>
+  <div class="cols cols-2 mid">
+    <div class="stat center"><div class="big">0 → 16</div><div class="lbl">of 16 contract tests passing, start state to finished, in the course's run</div></div>
+    <ul class="bullets small">
+      <li>valid motor and health claims, and the model version in the answer</li>
+      <li>missing field, wrong type, out of range, unknown line, unknown field</li>
+      <li>a motor claim without its vehicle age; a malformed national id</li>
+      <li>a body that is not JSON; a request id on every response</li>
+      <li>a model that fails to load: 503, <code>model-unavailable</code></li>
+    </ul>
+  </div>
+  <aside class="notes"><p>Real counts. The start state fails all 16 because its route is <code>/triage</code>, which answers 404 to the tests; after the path is versioned, the schema and error tests fail one by one until the handlers are written. These tests are the evidence of LO3.</p></aside>
+</section>
+
+<section class="slide" id="check-contract" data-lo="LO3" data-n="34" data-session="3">
+  <div class="kicker">Checkpoint</div>
+  <h2>A claim with an extra field</h2>
+  <div class="quiz" data-type="single" data-lo="LO3" data-id="check-contract-q1">
+    <p class="lead">The claims system starts sending "fraud_flag": true with some claims. Farz's contract does not list the field. What should the service do?</p>
+    <div class="opts">
+      <div class="opt" data-why="Silently dropping it lets the caller believe the flag changed the triage" data-k="A">Ignore the field and triage the claim</div>
+      <div class="opt" data-why="The model has no input for it: passing it on changes nothing and hides the gap" data-k="B">Pass it to the model as an eleventh feature</div>
+      <div class="opt" data-why="A 500 says the service broke, and the caller will retry the same claim" data-k="C">Answer 500, prediction-failed</div>
+      <div class="opt" data-ok data-k="D">Answer 422, validation-error, naming fraud_flag</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> The caller thinks the field matters; a validation error naming it starts the conversation about whether it should.</div>
+  </div>
+  <aside class="notes"><p>Answer: D. Some teams accept unknown fields to make rollouts easier; then they must log and count them. Rifd's contract forbids them.</p></aside>
+</section>
+
+<section class="slide lab top" id="lab-1-3" data-auto="lab" data-lab="1.3" data-label="Lab 1.3" data-n="35" data-session="3">
+  <div class="cols cols-2 mid"><div><div class="lab-tag">Lab 1.3 · 25 min</div><h2>A versioned endpoint with a contract</h2><p class="lead small">Build a versioned prediction endpoint that validates inputs and returns typed errors, until the supplied contract tests pass.</p><a class="nb" href="../labs/D1_3_prediction_api.html">D1_3_prediction_api.html</a></div><ul class="checklist"><li>Run the contract tests against the naive endpoint <span class="min">3 min</span></li><li>Write the request and response schemas <span class="min">8 min</span></li><li>Return problem details for each error type <span class="min">8 min</span></li><li>Pass all contract tests <span class="min">4 min</span></li><li>Check <span class="min">2 min</span></li><li class="stretch">✱ Stretch: Add a batch endpoint that takes up to 100 claims and reports errors per item</li></ul></div>
+  <aside class="notes"><p>AI policy: tutor. Usual problems: leaving <code>extra="ignore"</code>; raising <code>HTTPException</code> in a validator; a server from an earlier step still holding port 8000. Solution: <code>labs/solutions/S1_3.py</code>.</p></aside>
+</section>
+
+<!-- Session 4 -->
+
+<section class="slide section" id="s4" data-auto="section" data-session="4" data-n="36">
+  <div class="kicker">Session 4</div>
+  <h1>Health, readiness and warm-up</h1>
+  <ul class="bullets outcomes"><li>Separate a liveness check from a readiness check</li><li>Load and warm a model before the service accepts traffic</li><li>Show the behaviour of each check when the model file fails to load</li></ul>
+  <div class="sess-no">04</div>
+</section>
+
+<section class="slide" id="two-questions" data-lo="LO3" data-n="37" data-session="4">
+  <div class="kicker">Health and readiness</div>
+  <h2>"Is it alive?" and "should it get traffic?" are two questions</h2>
+  <div class="cols cols-2">
+    <div class="card c-teal"><h4>/livez · liveness</h4><p class="small mb0">Can the process answer at all? If not, restart it. Never looks at the model or at a dependency.</p></div>
+    <div class="card c-cyan"><h4>/readyz · readiness</h4><p class="small mb0">Is the model loaded, verified and warm? If not, send no traffic here, and do not restart.</p></div>
+  </div>
+  <div class="callout warn mt"><b>What goes wrong.</b> One <code>/health</code> that says OK: traffic reaches a pod with no model, and every claim fails.</div>
+  <aside class="notes"><p>Kubernetes acts on the two answers differently: a failed liveness probe restarts the container; a failed readiness probe removes the pod from the service's endpoints. Day 2 wires both into the manifest. Sources: Kubernetes documentation, liveness, readiness and startup probes.</p></aside>
+</section>
+
+<section class="slide" id="what-the-cluster-does" data-lo="LO3 LO4" data-n="38" data-session="4">
+  <div class="kicker">What each failure means</div>
+  <h2>A wrong check turns a bad file into a restart loop</h2>
+  <table class="t small">
+    <tr><th>Situation</th><th>/livez</th><th>/readyz</th><th>The cluster</th></tr>
+    <tr><td>Starting, model loading</td><td>200</td><td>503</td><td>waits; no traffic yet</td></tr>
+    <tr class="hl"><td>Model file missing or altered</td><td>200</td><td>503</td><td>keeps it out of service; you read why</td></tr>
+    <tr><td>Process stuck</td><td>no answer</td><td>no answer</td><td>restarts it</td></tr>
+    <tr><td>Liveness that checks the model, file missing</td><td>503</td><td>503</td><td>restarts it, forever</td></tr>
+  </table>
+  <aside class="notes"><p>The last row is the trap. A pod restarted forever hides the reason in a crash count; a pod that is alive and not ready says "no artefact at models/farz-1.0.0" at <code>/readyz</code>, where the on-call engineer can read it.</p></aside>
+</section>
+
+<section class="slide" id="lazy-loading" data-lo="LO3" data-n="39" data-session="4">
+  <div class="kicker">Model loading and warm-up</div>
+  <h2>Loading on the first request makes one caller pay for everyone</h2>
+  <div class="cols cols-2 mid">
+    <div class="stack">
+      <div class="stat center"><div class="big">64 ms</div><div class="lbl">to load and verify Farz 1.0.0</div></div>
+      <div class="stat center"><div class="big">97 ms</div><div class="lbl">for its first prediction, the warm-up</div></div>
+    </div>
+    <ul class="bullets small">
+      <li>Load at start, verify the sha256, then make one warm-up prediction</li>
+      <li>The warm-up is checked against the artefact's reference label</li>
+      <li>Only then does <code>/readyz</code> say ready</li>
+    </ul>
+  </div>
+  <aside class="notes"><p>Real numbers from the course's run of Lab 1.4 on a laptop; yours will differ. A later prediction takes about one millisecond: the first is slower because libraries set themselves up on first use. For a bigger model the load takes seconds, and the first caller would time out.</p></aside>
+</section>
+
+<section class="slide" id="lifespan-load" data-lo="LO3" data-n="40" data-session="4">
+  <div class="kicker">Lab 1.4 · step 2</div>
+  <h2>Load and warm in the lifespan, before the first request</h2>
+  <pre class="code s" data-file="src/rifd/app.py"><code class="language-python"><span class="hljs-meta">@asynccontextmanager</span>
+<span class="hljs-keyword">async</span> <span class="hljs-keyword">def</span> <span class="hljs-title function_">lifespan</span>(<span class="hljs-params">app: FastAPI</span>):
+    logs.configure(s.log_file)
+    load_farz(app)        <span class="hljs-comment"># load, verify sha256, warm up; never raises</span>
+    <span class="hljs-keyword">yield</span>
+
+<span class="hljs-keyword">def</span> <span class="hljs-title function_">load_farz</span>(<span class="hljs-params">app</span>):
+    <span class="hljs-keyword">try</span>:
+        model = artefact.load(s.model_dir)
+        warm = model.predict([model.meta[<span class="hljs-string">&quot;reference&quot;</span>][<span class="hljs-number">0</span>][<span class="hljs-string">&quot;input&quot;</span>]])
+        ...
+        app.state.ready = <span class="hljs-literal">True</span>
+    <span class="hljs-keyword">except</span> Exception <span class="hljs-keyword">as</span> e:
+        app.state.load_error = <span class="hljs-built_in">str</span>(e)   <span class="hljs-comment"># alive, not ready, and says why</span></code></pre>
+  <aside class="notes"><p>The important line is the last: a failed load does not crash the process. The process stays alive, <code>/readyz</code> reports the reason, and the cluster keeps traffic away. Crashing would also work for the cluster, but the reason would be lost in a restart count.</p></aside>
+</section>
+
+<section class="slide" id="missing-model" data-lo="LO3" data-n="41" data-session="4">
+  <div class="kicker">Lab 1.4 · step 4</div>
+  <h2>With the model file missing, the service is alive and says why it is not ready</h2>
+  <div class="trace s">
+    <div class="ev call"><b>GET /livez</b><span><code>200 {"status": "alive"}</code></span></div>
+    <div class="ev error"><b>GET /readyz</b><span><code>503 urn:rifd:problem:model-unavailable · no artefact at models/missing</code></span></div>
+    <div class="ev error"><b>POST /v1/triage</b><span><code>503 urn:rifd:problem:model-unavailable</code></span></div>
+    <div class="ev final"><b>tests</b><span><code>tests/test_health.py: 5 passed</code></span></div>
+  </div>
+  <aside class="notes"><p>Real output of the course's run. A fifth test appends bytes to a copy of <code>model.skops</code>: the sha256 no longer matches, and the service is alive and not ready with "does not match the sha256". That is the registry's hash doing its work at run time.</p></aside>
+</section>
+
+<section class="slide" id="time-to-ready" data-lo="LO3 LO4" data-n="42" data-session="4">
+  <div class="kicker">Looking ahead to Day 2</div>
+  <h2>Most of the time to ready is importing libraries, not loading the model</h2>
+  <ul class="bullets">
+    <li>In the course's runs, Farz took 11 to 22 seconds from process start to ready on a laptop</li>
+    <li>Of that, loading the model took under a tenth of a second</li>
+    <li>The rest was Python importing scikit-learn, skops and the web stack</li>
+    <li class="frag">A cluster that gives up after five seconds restarts a healthy pod: Day 2 adds a <b>startup probe</b></li>
+  </ul>
+  <aside class="notes"><p>Measured with <code>tools/measure.py</code> on the course's laptop, which was also running other work: expect less on a quiet machine, and measure your own. Lab 2.4 compares this with Shabih, whose model load is much longer.</p></aside>
+</section>
+
+<section class="slide" id="check-health" data-lo="LO3" data-n="43" data-session="4">
+  <div class="kicker">Checkpoint</div>
+  <h2>Which check fails?</h2>
+  <div class="quiz" data-type="single" data-lo="LO3" data-id="check-health-q1">
+    <p class="lead">A new Farz pod starts, but its model file was copied incompletely. The process is running and answers HTTP. What should /livez and /readyz answer?</p>
+    <div class="opts">
+      <div class="opt" data-why="A liveness failure restarts the pod, and a restart cannot fix a bad file: a restart loop" data-k="A">/livez 503, /readyz 503</div>
+      <div class="opt" data-ok data-k="B">/livez 200, /readyz 503 with the reason</div>
+      <div class="opt" data-why="Ready with a bad model sends every claim to a service that cannot triage it" data-k="C">/livez 200, /readyz 200, then 503 on each prediction</div>
+      <div class="opt" data-why="Readiness is the check that guards traffic; liveness failing alone would restart a pod that could not serve anyway" data-k="D">/livez 503, /readyz 200</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> The process is fine and the model is not: stop the traffic, keep the process, and say why.</div>
+  </div>
+  <aside class="notes"><p>Answer: B. If anyone picks A, return to the restart-loop row of the table.</p></aside>
+</section>
+
+<section class="slide lab top" id="lab-1-4" data-auto="lab" data-lab="1.4" data-label="Lab 1.4" data-n="44" data-session="4">
+  <div class="cols cols-2 mid"><div><div class="lab-tag">Lab 1.4 · 25 min</div><h2>Health and readiness checks</h2><p class="lead small">Add health and readiness checks and show how they differ when the model file is missing.</p><a class="nb" href="../labs/D1_4_health_readiness.html">D1_4_health_readiness.html</a></div><ul class="checklist"><li>See the old health check say OK with no model <span class="min">4 min</span></li><li>Load and warm the model in the lifespan <span class="min">7 min</span></li><li>Write /livez and /readyz <span class="min">6 min</span></li><li>Test both with the model file missing <span class="min">6 min</span></li><li>Check <span class="min">2 min</span></li><li class="stretch">✱ Stretch: Make /readyz fail when the warm-up prediction disagrees with the artefact's reference prediction</li></ul></div>
+  <aside class="notes"><p>AI policy: tutor. Usual problems: a <code>/livez</code> that calls <code>/readyz</code>; leaving the lazy load in the route as well; background servers from earlier labs on port 8000 (<code>kill %1</code>). Solution: <code>labs/solutions/S1_4.py</code>.</p></aside>
+</section>
+
+<section class="slide" id="wrap-up" data-lo="LO1 LO2 LO3" data-n="45" data-session="4">
+  <div class="kicker">Day 1 · wrap-up</div>
+  <h2>Three things to keep from today</h2>
+  <div class="cols cols-3">
+    <div class="card c-teal"><h4>The rule is part of the model</h4><p class="small mb0">An artefact holds the file, the signature, the decision rule and the pins, and proves itself on reference predictions.</p></div>
+    <div class="card c-cyan"><h4>Versions never change</h4><p class="small mb0">Every answer names its version; the registry turns the version into data, code and evidence.</p></div>
+    <div class="card c-coral"><h4>The contract is tested</h4><p class="small mb0">Validation, typed errors, and two checks that say alive and ready separately.</p></div>
+  </div>
+  <aside class="notes"><p>Ask each participant to say which of the three their own team does least. Tomorrow the service goes into a container image and onto a cluster.</p></aside>
+</section>
+
+<section class="slide dark" id="next" data-lo="LO4" data-n="46" data-session="4">
+  <div class="kicker">Next</div>
+  <h2>Day 2: containers and a cluster</h2>
+  <ul class="bullets">
+    <li>Start your container runtime (Docker or Podman) and check that <code>docker run hello-world</code> works</li>
+    <li>Install kind, k3d or minikube and <code>kubectl</code>; the setup notes are in <code>labs/README.md</code></li>
+    <li>Lab 2.1's container file is written without AI help: read the pre-work on layers again</li>
+  </ul>
+  <aside class="notes"><p>Ask anyone whose laptop cannot run containers to say so tonight: Day 2's container steps then run on a neighbour's machine or the trainer's demonstration, and every other step still runs with uv.</p></aside>
+</section>
+</div>
+<script type="application/json" id="academy-data">{"v":1,"engine":"1.0.0","build":{"at":"2026-11-15T09:27:24Z","version":"2027.1.0","commit":"fec8449"},"course":{"id":"ae-205","code":"AE-205","title":"Deploying AI Services: Containers, Serving and Monitoring","track":"ai-engineering","lang":"en","dir":"ltr","url":"https://sdaiaacademy.github.io/ae-205/","repo":"SDAIAAcademy/ae-205","home":"../index.html"},"deck":{"id":"day1","kind":"day","day":1,"label":"Day 1","title":"Package and serve","prev":null,"next":"day2.html","md":"day1.md","alt":{}},"sessions":[{"n":1,"label":"Session 1","title":"From notebook to artefact","slide":"s1","outcomes":["Name the artefact, image, registry, runtime, endpoint and monitor on a deployment path","Convert a notebook pickle into an artefact with a signature, pins and its decision rule","Prove an artefact by reloading it in a clean environment against reference predictions"],"minutes":50,"lab":{"id":"1.1","title":"Export Farz as an artefact","minutes":25,"href":"../labs/D1_1_export_artefact.html"}},{"n":2,"label":"Session 2","title":"A registry for model versions","slide":"s2","outcomes":["Register a model version with metrics, a data hash and a commit","Explain why a registered version is never overwritten","Load a model by version and by alias and say when to use each"],"minutes":50,"lab":{"id":"1.2","title":"Register two versions","minutes":25,"href":"../labs/D1_2_registry.html"}},{"n":3,"label":"Session 3","title":"A prediction API with a contract","slide":"s3","outcomes":["Choose online, batch or streaming prediction for a use case","Validate a request against a written contract before the model sees it","Return typed errors that a caller can act on"],"minutes":50,"lab":{"id":"1.3","title":"A versioned endpoint with a contract","minutes":25,"href":"../labs/D1_3_prediction_api.html"}},{"n":4,"label":"Session 4","title":"Health, readiness and warm-up","slide":"s4","outcomes":["Separate a liveness check from a readiness check","Load and warm a model before the service accepts traffic","Show the behaviour of each check when the model file fails to load"],"minutes":50,"lab":{"id":"1.4","title":"Health and readiness checks","minutes":25,"href":"../labs/D1_4_health_readiness.html"}}],"slides":[{"id":"title","n":1,"title":"Package and serve","kind":"title","session":0,"hash":"b50d8880","md":"#### [day1#title] Package and serve\n\n*SDAIA Academy · Deploying AI Services: Containers, Serving and Monitoring*\n\nDay 1: From a notebook pickle to a versioned API that checks its inputs and says when it is ready\n\nAI Engineering Track · 4 teaching days + capstone day · 4 sessions · 4 labs · AE-205","notes":"Welcome. Ask the room: who has had a model work in a notebook and fail somewhere else? Most hands go up; that gap is this course. The rhythm: four sessions a day, each about 25 minutes of ideas and a 25-minute lab. Labs run in a terminal on your laptop; container and cluster labs start tomorrow.\n\nCheck before the first lab that everyone has `git`, `uv` and a shell. The pre-work covered containers and HTTP; the entry quiz is done before this session, without AI help.","minutes":null,"lo":[]},{"id":"agenda","n":2,"title":"Package and serve","kind":"content","session":0,"hash":"1e7f23c0","md":"#### [day1#agenda] Package and serve\n\n*Today*\n\n- **Session 1 · From notebook to artefact**: The path from a trained model to a served prediction, serialisation formats, signatures, pins and the decision logic that hides in a notebook\n- **Session 2 · A registry for model versions**: Immutable versions with metrics, tags and lineage, aliases for champion and challenger, and loading by version\n- **Session 3 · A prediction API with a contract**: Online, batch and streaming prediction, a contract written first, input validation, typed errors and a version in the path\n- **Session 4 · Health, readiness and warm-up**: Liveness and readiness as two questions, loading and warming the model at start, and what a service does when its model file is missing","notes":"","minutes":null,"lo":[]},{"id":"meet-rifd","n":3,"title":"Rifd's claims team wants two notebook models in service","kind":"content","session":0,"hash":"4b629d5a","md":"#### [day1#meet-rifd] Rifd's claims team wants two notebook models in service\n\n*The case study*\n\n- **Farz · triage.** Every new motor, health or property claim gets fast track, standard or investigate.\n- **Shabih · similar claims.** An adjuster describes a claim and gets the five most similar past claims.\n\n- **Munira Al-Ajmi**, head of claims operations: owns the latency objective and decides rollbacks\n- **Adel Al-Shaikh**, data scientist: trained both models in a notebook\n- **Ghaida Al-Ruqi**, on-call platform engineer\n- **Bassam Al-Jaber**, data protection officer\n- **You**: the engineer who takes the models from the notebook to a monitored service","notes":"Rifd Mutual Insurance is fictional; all 50,000 claims are generated with a fixed seed, and the names, national ids and mobile numbers in them are invented. Kholoud Al-Ghannam, a senior adjuster, appears on Day 2 as the user of Shabih.\n\nEvery lab starts from its own folder in the workspace, so a missed lab never blocks the next one.","minutes":null,"lo":["LO1"]},{"id":"s1","n":4,"title":"From notebook to artefact","kind":"section","session":1,"hash":"a4d0e2cf","md":"#### [day1#s1] From notebook to artefact\n\n*Session 1*\n\n- Name the artefact, image, registry, runtime, endpoint and monitor on a deployment path\n- Convert a notebook pickle into an artefact with a signature, pins and its decision rule\n- Prove an artefact by reloading it in a clean environment against reference predictions","notes":"","minutes":null,"lo":["LO1","LO2"]},{"id":"path-to-prediction","n":5,"title":"Six things stand between a trained model and a served prediction","kind":"content","session":1,"hash":"21562410","md":"#### [day1#path-to-prediction] Six things stand between a trained model and a served prediction\n\n*The path*\n\n1. **Artefact** the model, its signature, its pins\n2. **Registry** versions you can name\n3. **Image** code, libraries, artefact\n4. **Runtime** a cluster runs the image\n5. **Endpoint** a versioned API\n6. **Monitor** metrics, logs, traces\n\nThis course builds each box for Farz, one day at a time: artefact and endpoint today, image and runtime tomorrow, the monitor on Days 3 and 4.","notes":"This is LO1: by the end of the course a participant labels this diagram from memory with one sentence per box; the exit check asks for it. Walk the boxes left to right and ask, for each, \"what breaks if this box is missing?\" Without a registry nobody can say which model answered; without a monitor nobody knows it is wrong.","minutes":null,"lo":["LO1"]},{"id":"the-handover","n":6,"title":"A notebook hand-over is a pickle, a script and a number","kind":"content","session":1,"hash":"2051c536","md":"#### [day1#the-handover] A notebook hand-over is a pickle, a script and a number\n\n*What you are given*\n\n- **Adel hands over.**\n  - `farz_notebook.pkl`, the fitted pipeline\n  - `train_triage.py`, the notebook as a script\n  - macro F1 0.728 on 10,000 held-out claims\n- **Nobody wrote down.**\n  - which library versions load it\n  - which inputs it expects, with which types\n  - what the claims team does with the probabilities\n\n> **What goes wrong.** The model \"works on my machine\" because the machine is the missing documentation.","notes":"The F1 comes from the course's run of the notebook on the synthetic claims (the first 40,000 claims by day for training, the last 10,000 held out). Ask the room which of the three missing things they have been bitten by. Lab 1.1 finds the third one.","minutes":null,"lo":["LO2"]},{"id":"serialisation-formats","n":7,"title":"A model file is either data or a program","kind":"content","session":1,"hash":"d43b0ec5","md":"#### [day1#serialisation-formats] A model file is either data or a program\n\n*Serialisation formats*\n\n| Format | What loading does | Portable across languages | Use it for |\n| --- | --- | --- | --- |\n| pickle, joblib | imports and calls whatever the file names | no | files you made yourself, once |\n| skops | rebuilds only types on a trusted list | no (Python, scikit-learn) | scikit-learn models you share |\n| ONNX | reads a graph of operators | yes | serving outside Python |\n| framework formats | weights plus a known architecture | within the framework | deep learning models |","notes":"The Python documentation warns that unpickling can run arbitrary code: never load a pickle from a source you do not trust. skops saves scikit-learn objects in a format that loads only types you approve. Farz uses skops from lab 1.1 on. Sources: Python pickle documentation; skops secure persistence.","minutes":null,"lo":["LO2"]},{"id":"pickle-is-code","n":8,"title":"Read what a pickle imports before you load it","kind":"content","session":1,"hash":"c39b883d","md":"#### [day1#pickle-is-code] Read what a pickle imports before you load it\n\n*Lab 1.1 · step 2*\n\n```bash\n# file: terminal\n$ uv run python -m pickletools ../notebook/farz_notebook.pkl | grep sklearn\nsklearn.feature_extraction._dict_vectorizer\nsklearn.linear_model._logistic\nsklearn.pipeline\nsklearn.preprocessing._data\n```\n\n> **Load the pickle once,** where it was made or from someone you trust, and save it again in a safer format.\n\n> **skops says what it does not trust.** Farz 1.1.0, a boosted model, holds one type that is not on the default list; the course's loader accepts it by name.","notes":"Real output of the course's run (the list is shortened to the scikit-learn modules). The point is the habit, not this file: the four names are harmless, and a malicious file would name `os.system` instead. The type skops does not trust by default for gradient boosting is its tree predictor; `rifd.artefact` keeps a list of reviewed types and refuses any other.","minutes":null,"lo":["LO2"]},{"id":"artefact-folder","n":9,"title":"Four files, each the answer to a question someone will ask","kind":"content","session":1,"hash":"be4f7b63","md":"#### [day1#artefact-folder] Four files, each the answer to a question someone will ask\n\n*An artefact*\n\n- **model.skops.** What computes the probabilities? Saved so that loading runs no code.\n- **signature.json.** What goes in and comes out? Ten input fields with types, three labels out.\n- **metadata.json.** Which version, which data, which decision rule, which sha256, which ten reference predictions?\n- **requirements.txt.** Which exact library versions load it? Six lines with `==`.","notes":"MLflow's model format has the same parts under other names: the model files, a signature, an input example and a requirements file. Ask: which file would the serving team read first? The signature: it is the contract between the model and the API they will write in session 3.","minutes":null,"lo":["LO2"]},{"id":"hidden-decision-rule","n":10,"title":"The pickle alone reproduced 8 of the notebook's 10 predictions","kind":"content","session":1,"hash":"a7d67540","md":"#### [day1#hidden-decision-rule] The pickle alone reproduced 8 of the notebook's 10 predictions\n\n*Lab 1.1 · the planted problem*\n\n**8 / 10** reference predictions matched before the rule was exported\n\n```python\n# file: notebook/train_triage.py · cell 14\nINVESTIGATE_AT = 0.30\n\ndef label_from(proba):\n    if proba[\"investigate\"] >= INVESTIGATE_AT:\n        return \"investigate\"\n    return max(proba, key=proba.get)\n```\n\nCLM-041177: investigate 0.42, standard 0.57. The notebook says investigate; the pickle says standard.","notes":"Real numbers of the course's run of Lab 1.1. The decision rule is part of the model even though it is not in the model file: the artefact records it in `metadata.json` and the serving code applies it. Ask where else such rules hide: a threshold in a dashboard, a cap in a spreadsheet, a rounding in a report.","minutes":null,"lo":["LO2"]},{"id":"pins-not-lock","n":11,"title":"The project's lock file and the artefact's pins answer different questions","kind":"content","session":1,"hash":"c53bfd01","md":"#### [day1#pins-not-lock] The project's lock file and the artefact's pins answer different questions\n\n*Recap from FN-102, one step further*\n\n- **uv.lock (FN-102).** Every package of the project, for every platform: rebuilds the environment that develops and serves the service.\n- **requirements.txt of the artefact.** The six libraries that load this model file, at the versions that wrote it: `scikit-learn==1.9.1`, `numpy==2.5.4`, `skops==0.16.0` and three more.\n\n> **Proof, not belief.** An environment with only the pins must reproduce the ten reference predictions.","notes":"FN-102, Day 2, session 3 taught lock files; this is one slide of recap, not a lesson. The versions are those of the course's run in November 2026 and will differ in your cohort: that is the point of writing them down. A model saved by one scikit-learn version is not guaranteed to load, or to predict the same, in another.","minutes":null,"lo":["LO2"]},{"id":"clean-reload","n":12,"title":"A clean environment holds the pins and nothing else","kind":"content","session":1,"hash":"f225ec6b","md":"#### [day1#clean-reload] A clean environment holds the pins and nothing else\n\n*A reproducible build*\n\n```bash\n# file: terminal\n$ uv run --isolated --no-project --with-requirements artefacts/farz-1.0.0/requirements.txt \\\n    python tools/check_reload.py artefacts/farz-1.0.0\nfarz 1.0.0 loaded with pinned versions; 10 of 10 reference predictions match\n  ok CLM-047849  expected investigate  got investigate\n  ok CLM-049970  expected fast_track   got fast_track\n  ...\n```","notes":"Real output. `--isolated` makes uv build a fresh environment instead of reusing the project's, and `--no-project` keeps the project's own dependencies out, so the test proves the pins are enough. The loader also compares the running versions with the pins and refuses when they differ. This command is the evidence of LO2 in the capstone.","minutes":null,"lo":["LO2"]},{"id":"check-artefact","n":13,"title":"What is missing from this artefact?","kind":"quiz","session":1,"hash":"06f6ad32","md":"#### [day1#check-artefact] What is missing from this artefact?\n\n*Checkpoint*\n\n**Question:** A colleague exports a churn model as model.skops, signature.json and requirements.txt with exact pins. A clean environment loads it and reproduces 7 of 10 reference predictions. The notebook ranked customers and called the top 5% at risk. What is missing?\n\n- A. A safer format than skops\n- B. Looser pins, so that the newest versions install\n- C. The decision rule: the top-5% cut-off that turned scores into labels\n- D. Twenty reference predictions instead of ten","notes":"Answer: C. It is Lab 1.1's problem in another setting. If many pick B, return to the pins slide: exact pins are the fix for a different failure.","minutes":null,"lo":["LO2"]},{"id":"lab-1-1","n":14,"title":"Export Farz as an artefact","kind":"lab","session":1,"hash":"7d176448","md":"#### [day1#lab-1-1] Export Farz as an artefact\n\nLab 1.1 · 25 min\n\nExport the claims-triage model with its signature and pinned dependencies and reload it in a clean environment, reproducing ten reference predictions.\n\n[D1_1_export_artefact.html](https://sdaiaacademy.github.io/ae-205/labs/D1_1_export_artefact.html)\n\n- [ ] Build the workspace and open lab 1.1 (4 min)\n- [ ] Load the notebook pickle and read what it needs (5 min)\n- [ ] Export with a signature, pins and the decision rule (8 min)\n- [ ] Reload in a clean environment; match ten predictions (6 min)\n- [ ] Check (2 min)\n- [ ] ✱ Stretch: Open the pickle with pickletools and list the imports it would run on load","notes":"AI policy: tutor. The first four minutes build the workspace; start it during the checkpoint if the room is slow. Usual problems: a long-path error on Windows (set `UV_PROJECT_ENVIRONMENT` to a short folder), running the clean reload without `--isolated`, typing 0.3 instead of importing the constant. Solution: `labs/solutions/S1_1.py`.","minutes":null,"lo":[]},{"id":"s2","n":15,"title":"A registry for model versions","kind":"section","session":2,"hash":"2bd1fb1b","md":"#### [day1#s2] A registry for model versions\n\n*Session 2*\n\n- Register a model version with metrics, a data hash and a commit\n- Explain why a registered version is never overwritten\n- Load a model by version and by alias and say when to use each","notes":"","minutes":null,"lo":["LO2"]},{"id":"why-registry","n":16,"title":"A registry answers \"which model gave this answer?\" in one lookup","kind":"content","session":2,"hash":"3914e1d4","md":"#### [day1#why-registry] A registry answers \"which model gave this answer?\" in one lookup\n\n*Why a registry*\n\n- An adjuster disputes a triage: which version scored that claim, trained on which data?\n- A canary misbehaves: what exactly changed between the two versions?\n- An auditor asks for the model that ran in March: can you load it today?\n- Two teams both say \"the new model\": are they talking about the same file?\n\n> **What goes wrong.** A folder called `final_v2_really` on a shared drive answers none of these.","notes":"Each question is one Rifd will meet in the next four days: the dispute in Day 3's logs, the canary on Day 4, the audit in the runbook. Ask which of them the room can answer today for a model they own.","minutes":null,"lo":["LO2"]},{"id":"versions-never-change","n":17,"title":"A registered version never changes","kind":"content","session":2,"hash":"b5545e67","md":"#### [day1#versions-never-change] A registered version never changes\n\n*Lab 1.2 · step 3*\n\n```bash\n# file: terminal\n$ uv run python -m rifd.registry register --name farz --version 1.0.0 --from models/farz-1.1.0\nrefused: farz 1.0.0 is already registered and versions never change:\nregister farz with a new version\n```\n\nA release log, a canary comparison and an incident note all say \"farz 1.0.0\". If the name could point at another file, none of them could be checked.","notes":"Real output of the course's run. The same rule holds in MLflow (a model version is immutable; you add a new one) and in a git repository of artefacts (a tag that is never moved). Retraining on more data is a new version, even when the code did not change.","minutes":null,"lo":["LO2"]},{"id":"what-a-version-carries","n":18,"title":"A version carries its evidence and its lineage","kind":"content","session":2,"hash":"43fa0969","md":"#### [day1#what-a-version-carries] A version carries its evidence and its lineage\n\n*Metrics and tags*\n\n| Field | Farz 1.0.0 in the course's run | Answers |\n| --- | --- | --- |\n| sha256 of the model file | `ee8e2221b179…` | is this the file that was registered? |\n| metrics | macro F1 0.728, investigate recall 0.746 | how good was it when registered? |\n| tag data_sha256 | hash of `claims.csv` | which data trained it? |\n| tag trained_by | Adel Al-Shaikh | whom do I ask? |\n| tag source | `notebook/train_triage.py` | which code made it? |","notes":"Real values from the course's registry after Lab 1.2. In a team, the source tag is a commit id rather than a file name. Say that metrics on a held-out set are a claim about the past; Day 4 measures the version on live traffic.","minutes":null,"lo":["LO2"]},{"id":"two-versions","n":19,"title":"1.1.0 is better than 1.0.0, but only just","kind":"content","session":2,"hash":"ccffbc4c","md":"#### [day1#two-versions] 1.1.0 is better than 1.0.0, but only just\n\n*The two supplied versions*\n\n| Item | Value |\n| --- | --- |\n| 1.0.0 macro F1 | 0.728 |\n| 1.1.0 macro F1 | 0.735 |\n| 1.0.0 investigate recall | 0.746 |\n| 1.1.0 investigate recall | 0.747 |\n\n> **Decide on live evidence.** A gap this small on one held-out set does not justify a release by itself; Day 4's canary does.","notes":"Real metrics of the course's run on the 10,000 held-out claims. 1.0.0 is logistic regression; 1.1.0 is gradient boosting, 38 times larger on disk (1.9 MB against 50 KB) and slower to predict. Ask what Munira gains from a 0.007 better F1, and what she pays.","minutes":null,"lo":["LO2"]},{"id":"aliases","n":20,"title":"An alias moves; a version does not","kind":"content","session":2,"hash":"70783ae2","md":"#### [day1#aliases] An alias moves; a version does not\n\n*Aliases*\n\n- **farz@champion → 1.0.0.** Moving the alias changes what every reader of the alias loads, with no deployment.\n- **farz 1.0.0.** Always the same file. A rollback is a change of one line in the manifest, and the manifest says what runs.\n\n> **Rifd's rule.** Production names a version; staging and the weekly batch may follow `champion`.","notes":"This is a design choice, and Rifd's rule is one reasonable answer. The other answer, production following an alias, makes releases fast and audits hard: the manifest no longer says which model ran. MLflow writes an alias as `models:/farz@champion`.","minutes":null,"lo":["LO2"]},{"id":"registry-tools","n":21,"title":"Folder registry, MLflow and git tags share one model","kind":"content","session":2,"hash":"b9e79e42","md":"#### [day1#registry-tools] Folder registry, MLflow and git tags share one model\n\n*The same ideas, other tools*\n\n| Idea | rifd.registry (the labs) | MLflow | Git repository of artefacts |\n| --- | --- | --- | --- |\n| A model | `--name farz` | registered model | a folder |\n| A version | `--version 1.0.0` | model version | an annotated tag |\n| Evidence | metrics, tags | run metrics, tags | files in the commit |\n| A pointer that moves | alias | alias | a branch or a file of aliases |","notes":"The labs use a folder registry of about 150 lines so that participants can read all of it. MLflow adds a server, a user interface and run tracking; check its current documentation before using it, because its interfaces change between major versions. Sources: MLflow model registry documentation.","minutes":null,"lo":["LO2"]},{"id":"lineage","n":22,"title":"From one prediction back to the data, in four hops","kind":"content","session":2,"hash":"9074a272","md":"#### [day1#lineage] From one prediction back to the data, in four hops\n\n*Lineage*\n\n1. **A response** `\"model\": {\"version\": \"1.0.0\"}`\n2. **The registry** farz 1.0.0, sha256\n3. **The tags** data_sha256, source\n4. **The data** `claims.csv`, 40,000 rows\n\nSession 3 puts the version in every response, so the first hop is always there.","notes":"Ask which hop breaks most often in practice: usually the last, because the data was a query result nobody saved. Hashing the training file at registration closes it. AE-305 builds full retraining pipelines with lineage on top of this.","minutes":null,"lo":["LO1","LO2"]},{"id":"check-registry","n":23,"title":"Retrained on one more month","kind":"quiz","session":2,"hash":"66a57808","md":"#### [day1#check-registry] Retrained on one more month\n\n*Checkpoint*\n\n**Question:** Adel retrains Farz 1.0.0 with the same code on one more month of claims. Production names farz 1.0.0 in its manifest. What should be registered?\n\n- A. A new version, 1.0.1 or 1.1.0, with the new data hash, while production keeps 1.0.0\n- B. The new file as 1.0.0, so production picks it up\n- C. Nothing: the code did not change\n- D. Move the champion alias to the new file","notes":"Answer: A. Whether it is 1.0.1 or 1.1.0 is a team convention; say Rifd bumps the middle number when the data changes and the last when only the export changes.","minutes":null,"lo":["LO2"]},{"id":"lab-1-2","n":24,"title":"Register two versions","kind":"lab","session":2,"hash":"2f459c03","md":"#### [day1#lab-1-2] Register two versions\n\nLab 1.2 · 25 min\n\nRegister two supplied model versions with metrics and tags and load one by version.\n\n[D1_2_registry.html](https://sdaiaacademy.github.io/ae-205/labs/D1_2_registry.html)\n\n- [ ] Read the two supplied artefacts and their metrics (4 min)\n- [ ] Register 1.0.0 and 1.1.0 with tags and a data hash (8 min)\n- [ ] Try to overwrite 1.0.0 and read the refusal (3 min)\n- [ ] Set the champion alias; load by version and by alias (7 min)\n- [ ] Check (3 min)\n- [ ] ✱ Stretch: Write the same two registrations as MLflow calls, or as git tags on an artefact repository","notes":"AI policy: tutor. Usual problems: hashing the wrong file; a tag with a space and no quotes; Windows shells without `sha256sum` (the page gives the PowerShell line). Solution: `labs/solutions/S1_2.py`.","minutes":null,"lo":[]},{"id":"s3","n":25,"title":"A prediction API with a contract","kind":"section","session":3,"hash":"7b9b5acf","md":"#### [day1#s3] A prediction API with a contract\n\n*Session 3*\n\n- Choose online, batch or streaming prediction for a use case\n- Validate a request against a written contract before the model sees it\n- Return typed errors that a caller can act on","notes":"","minutes":null,"lo":["LO3"]},{"id":"serving-patterns","n":26,"title":"Online, batch or streaming: the caller decides","kind":"content","session":3,"hash":"0614c3fb","md":"#### [day1#serving-patterns] Online, batch or streaming: the caller decides\n\n*Serving patterns*\n\n| Pattern | The caller | At Rifd | What matters |\n| --- | --- | --- | --- |\n| Online | waits for the answer | Farz triages a claim as it is filed | latency, availability |\n| Batch | reads the results later | every night, re-score open claims for the weekly review | throughput, cost, completeness |\n| Streaming | an event arrives, a result is published | score each claim update from the claims system's event queue | ordering, back-pressure, duplicates |","notes":"Farz is online: the claims system calls it while a person waits. The same artefact can serve all three; the service around it differs. Ask the room for one use case of each in their own work.","minutes":null,"lo":["LO3"]},{"id":"contract-first","n":27,"title":"Write the contract before the code, and test the code against it","kind":"content","session":3,"hash":"19d75da6","md":"#### [day1#contract-first] Write the contract before the code, and test the code against it\n\n*Contract first*\n\n```markdown\n\u003c!-- file: CONTRACT.md (excerpt) -->\n| amount_sar        | number  | over 0, up to 5,000,000 |\n| vehicle_age_years | integer | 0 to 60; motor: needed  |\n| in_network        | boolean | health: needed          |\n| member            | object  | never sent to the model,\n                                never logged            |\n```\n\n- Agreed with the claims system's team: they build against it while you build the service\n- Every rule becomes a test in `tests/test_contract.py`\n- A change that breaks a caller is a new major version of the path","notes":"The full contract is in each lab folder as `CONTRACT.md`. Point out the member line: personal data arrives with the claim because the claims system sends whole records; the contract says what happens to it. That is a decision Bassam, the data protection officer, signed.","minutes":null,"lo":["LO3"]},{"id":"validate-before-model","n":28,"title":"Every field is checked before the model sees it","kind":"content","session":3,"hash":"1916c9cf","md":"#### [day1#validate-before-model] Every field is checked before the model sees it\n\n*Input validation*\n\n```python\n# file: src/rifd/schemas.py\nclass Claim(BaseModel):\n    model_config = ConfigDict(extra=\"forbid\")\n    line: Literal[\"motor\", \"health\", \"property\"]\n    amount_sar: float = Field(gt=0, le=5_000_000)\n    vehicle_age_years: int | None = Field(default=None, ge=0, le=60)\n\n    @model_validator(mode=\"after\")\n    def by_line(self):\n        if self.line == \"motor\" and self.vehicle_age_years is None:\n            raise ValueError(\"a motor claim needs vehicle_age_years\")\n        return self\n```","notes":"A model given a negative amount or an unknown line still returns a probability: models do not refuse bad input, so the service must. `extra=\"forbid\"` refuses a field the contract does not know, because a caller who sends it believes it has an effect. The rule across fields is a model validator that raises `ValueError`, which FastAPI turns into a validation error.","minutes":null,"lo":["LO3"]},{"id":"typed-errors","n":29,"title":"A caller switches on the error's type, never on its text","kind":"content","session":3,"hash":"2ee7949a","md":"#### [day1#typed-errors] A caller switches on the error's type, never on its text\n\n*Typed errors*\n\n| type | status | The caller |\n| --- | --- | --- |\n| `validation-error` | 422 | fixes the claim; never retries it as it is |\n| `model-unavailable` | 503 | retries later, or sends the claim to manual triage |\n| `dependency-failed` | 502 | retries later |\n| `prediction-failed` | 500 | reports the request id |\n\n> **What goes wrong.** A 200 with `\"error\": \"bad input\"` in the body: every dashboard counts it as a success.","notes":"The types are URNs (`urn:rifd:problem:validation-error`) so that they cannot be mistaken for a web page. The warning matters on Day 3: an error hidden in a 200 is invisible to the error-rate metric and to the alert.","minutes":null,"lo":["LO3"]},{"id":"problem-details","n":30,"title":"One shape for every error: RFC 9457","kind":"content","session":3,"hash":"a36537e9","md":"#### [day1#problem-details] One shape for every error: RFC 9457\n\n*Problem details*\n\n```json\n// file: 422 · application/problem+json\n{\n  \"type\": \"urn:rifd:problem:validation-error\",\n  \"title\": \"The claim does not match the contract\",\n  \"status\": 422,\n  \"detail\": \"1 field(s) failed validation\",\n  \"instance\": \"/v1/triage\",\n  \"errors\": [{\"field\": \"line\", \"message\": \"Input should be 'motor', 'health' or 'property'\"}],\n  \"request_id\": \"3f1c9a0d7e2b4c55\"\n}\n```","notes":"RFC 9457, Problem Details for HTTP APIs, defines `type`, `title`, `status`, `detail` and `instance` and allows extra members such as `errors`. The request id lets the caller and the on-call engineer find the same request in the logs on Day 3. Sources: RFC 9457.","minutes":null,"lo":["LO3"]},{"id":"versioned-path","n":31,"title":"The path carries the contract's version; the body carries the model's","kind":"content","session":3,"hash":"26b4b1a0","md":"#### [day1#versioned-path] The path carries the contract's version; the body carries the model's\n\n*Versions in two places*\n\n- **/v1/triage.** Changes only when the contract breaks a caller. `/v2/` runs beside `/v1/` until every caller has moved.\n- **\"model\": {\"version\": \"1.1.0\"}.** Changes with every release, contract unchanged. The first hop of lineage, and the field Day 4's canary comparison groups by.","notes":"Ask: a new model needs one extra input field. Is that /v2? Only if callers must send it; an optional field with a default keeps /v1. Keep the two version numbers apart: mixing them forces a contract change for every retraining.","minutes":null,"lo":["LO3"]},{"id":"personal-fields-dropped","n":32,"title":"The member's details are validated, then dropped before the model","kind":"content","session":3,"hash":"07779ea6","md":"#### [day1#personal-fields-dropped] The member's details are validated, then dropped before the model\n\n*Personal data at the boundary*\n\n1. **Request** claim + description + member\n2. **Validated** national id: 10 digits, starts 1 or 2\n3. **model_view()** the claim without member and text\n4. **Farz** ten fields\n\n> **Data minimisation in code.** What the model never receives, no model log or trace can leak.","notes":"The Personal Data Protection Law asks controllers to limit personal data to what the purpose needs; here the purpose is triage, which needs none of the member's details. Bassam's decision is enforced by one method, `model_view()`, and tested. Day 3 removes the same fields from logs. Sources: Personal Data Protection Law (SDAIA).","minutes":null,"lo":["LO3"]},{"id":"contract-tests","n":33,"title":"Sixteen contract tests, from all failing to all passing","kind":"content","session":3,"hash":"5de11fbb","md":"#### [day1#contract-tests] Sixteen contract tests, from all failing to all passing\n\n*Lab 1.3*\n\n**0 → 16** of 16 contract tests passing, start state to finished, in the course's run\n\n- valid motor and health claims, and the model version in the answer\n- missing field, wrong type, out of range, unknown line, unknown field\n- a motor claim without its vehicle age; a malformed national id\n- a body that is not JSON; a request id on every response\n- a model that fails to load: 503, `model-unavailable`","notes":"Real counts. The start state fails all 16 because its route is `/triage`, which answers 404 to the tests; after the path is versioned, the schema and error tests fail one by one until the handlers are written. These tests are the evidence of LO3.","minutes":null,"lo":["LO3"]},{"id":"check-contract","n":34,"title":"A claim with an extra field","kind":"quiz","session":3,"hash":"935ff2c0","md":"#### [day1#check-contract] A claim with an extra field\n\n*Checkpoint*\n\n**Question:** The claims system starts sending \"fraud_flag\": true with some claims. Farz's contract does not list the field. What should the service do?\n\n- A. Ignore the field and triage the claim\n- B. Pass it to the model as an eleventh feature\n- C. Answer 500, prediction-failed\n- D. Answer 422, validation-error, naming fraud_flag","notes":"Answer: D. Some teams accept unknown fields to make rollouts easier; then they must log and count them. Rifd's contract forbids them.","minutes":null,"lo":["LO3"]},{"id":"lab-1-3","n":35,"title":"A versioned endpoint with a contract","kind":"lab","session":3,"hash":"c864ea46","md":"#### [day1#lab-1-3] A versioned endpoint with a contract\n\nLab 1.3 · 25 min\n\nBuild a versioned prediction endpoint that validates inputs and returns typed errors, until the supplied contract tests pass.\n\n[D1_3_prediction_api.html](https://sdaiaacademy.github.io/ae-205/labs/D1_3_prediction_api.html)\n\n- [ ] Run the contract tests against the naive endpoint (3 min)\n- [ ] Write the request and response schemas (8 min)\n- [ ] Return problem details for each error type (8 min)\n- [ ] Pass all contract tests (4 min)\n- [ ] Check (2 min)\n- [ ] ✱ Stretch: Add a batch endpoint that takes up to 100 claims and reports errors per item","notes":"AI policy: tutor. Usual problems: leaving `extra=\"ignore\"`; raising `HTTPException` in a validator; a server from an earlier step still holding port 8000. Solution: `labs/solutions/S1_3.py`.","minutes":null,"lo":[]},{"id":"s4","n":36,"title":"Health, readiness and warm-up","kind":"section","session":4,"hash":"e758aaf3","md":"#### [day1#s4] Health, readiness and warm-up\n\n*Session 4*\n\n- Separate a liveness check from a readiness check\n- Load and warm a model before the service accepts traffic\n- Show the behaviour of each check when the model file fails to load","notes":"","minutes":null,"lo":["LO3"]},{"id":"two-questions","n":37,"title":"\"Is it alive?\" and \"should it get traffic?\" are two questions","kind":"content","session":4,"hash":"478b3daf","md":"#### [day1#two-questions] \"Is it alive?\" and \"should it get traffic?\" are two questions\n\n*Health and readiness*\n\n- **/livez · liveness.** Can the process answer at all? If not, restart it. Never looks at the model or at a dependency.\n- **/readyz · readiness.** Is the model loaded, verified and warm? If not, send no traffic here, and do not restart.\n\n> **What goes wrong.** One `/health` that says OK: traffic reaches a pod with no model, and every claim fails.","notes":"Kubernetes acts on the two answers differently: a failed liveness probe restarts the container; a failed readiness probe removes the pod from the service's endpoints. Day 2 wires both into the manifest. Sources: Kubernetes documentation, liveness, readiness and startup probes.","minutes":null,"lo":["LO3"]},{"id":"what-the-cluster-does","n":38,"title":"A wrong check turns a bad file into a restart loop","kind":"content","session":4,"hash":"eb0c3e81","md":"#### [day1#what-the-cluster-does] A wrong check turns a bad file into a restart loop\n\n*What each failure means*\n\n| Situation | /livez | /readyz | The cluster |\n| --- | --- | --- | --- |\n| Starting, model loading | 200 | 503 | waits; no traffic yet |\n| Model file missing or altered | 200 | 503 | keeps it out of service; you read why |\n| Process stuck | no answer | no answer | restarts it |\n| Liveness that checks the model, file missing | 503 | 503 | restarts it, forever |","notes":"The last row is the trap. A pod restarted forever hides the reason in a crash count; a pod that is alive and not ready says \"no artefact at models/farz-1.0.0\" at `/readyz`, where the on-call engineer can read it.","minutes":null,"lo":["LO3","LO4"]},{"id":"lazy-loading","n":39,"title":"Loading on the first request makes one caller pay for everyone","kind":"content","session":4,"hash":"e46763f5","md":"#### [day1#lazy-loading] Loading on the first request makes one caller pay for everyone\n\n*Model loading and warm-up*\n\n- **64 ms** to load and verify Farz 1.0.0\n- **97 ms** for its first prediction, the warm-up\n\n- Load at start, verify the sha256, then make one warm-up prediction\n- The warm-up is checked against the artefact's reference label\n- Only then does `/readyz` say ready","notes":"Real numbers from the course's run of Lab 1.4 on a laptop; yours will differ. A later prediction takes about one millisecond: the first is slower because libraries set themselves up on first use. For a bigger model the load takes seconds, and the first caller would time out.","minutes":null,"lo":["LO3"]},{"id":"lifespan-load","n":40,"title":"Load and warm in the lifespan, before the first request","kind":"content","session":4,"hash":"26c8002c","md":"#### [day1#lifespan-load] Load and warm in the lifespan, before the first request\n\n*Lab 1.4 · step 2*\n\n```python\n# file: src/rifd/app.py\n@asynccontextmanager\nasync def lifespan(app: FastAPI):\n    logs.configure(s.log_file)\n    load_farz(app)        # load, verify sha256, warm up; never raises\n    yield\n\ndef load_farz(app):\n    try:\n        model = artefact.load(s.model_dir)\n        warm = model.predict([model.meta[\"reference\"][0][\"input\"]])\n        ...\n        app.state.ready = True\n    except Exception as e:\n        app.state.load_error = str(e)   # alive, not ready, and says why\n```","notes":"The important line is the last: a failed load does not crash the process. The process stays alive, `/readyz` reports the reason, and the cluster keeps traffic away. Crashing would also work for the cluster, but the reason would be lost in a restart count.","minutes":null,"lo":["LO3"]},{"id":"missing-model","n":41,"title":"With the model file missing, the service is alive and says why it is not ready","kind":"content","session":4,"hash":"e739d362","md":"#### [day1#missing-model] With the model file missing, the service is alive and says why it is not ready\n\n*Lab 1.4 · step 4*\n\n- GET /livez: `200 {\"status\": \"alive\"}`\n- GET /readyz: `503 urn:rifd:problem:model-unavailable · no artefact at models/missing`\n- POST /v1/triage: `503 urn:rifd:problem:model-unavailable`\n- tests: `tests/test_health.py: 5 passed`","notes":"Real output of the course's run. A fifth test appends bytes to a copy of `model.skops`: the sha256 no longer matches, and the service is alive and not ready with \"does not match the sha256\". That is the registry's hash doing its work at run time.","minutes":null,"lo":["LO3"]},{"id":"time-to-ready","n":42,"title":"Most of the time to ready is importing libraries, not loading the model","kind":"content","session":4,"hash":"7831c996","md":"#### [day1#time-to-ready] Most of the time to ready is importing libraries, not loading the model\n\n*Looking ahead to Day 2*\n\n- In the course's runs, Farz took 11 to 22 seconds from process start to ready on a laptop\n- Of that, loading the model took under a tenth of a second\n- The rest was Python importing scikit-learn, skops and the web stack\n- A cluster that gives up after five seconds restarts a healthy pod: Day 2 adds a **startup probe**","notes":"Measured with `tools/measure.py` on the course's laptop, which was also running other work: expect less on a quiet machine, and measure your own. Lab 2.4 compares this with Shabih, whose model load is much longer.","minutes":null,"lo":["LO3","LO4"]},{"id":"check-health","n":43,"title":"Which check fails?","kind":"quiz","session":4,"hash":"6e1a4e13","md":"#### [day1#check-health] Which check fails?\n\n*Checkpoint*\n\n**Question:** A new Farz pod starts, but its model file was copied incompletely. The process is running and answers HTTP. What should /livez and /readyz answer?\n\n- A. /livez 503, /readyz 503\n- B. /livez 200, /readyz 503 with the reason\n- C. /livez 200, /readyz 200, then 503 on each prediction\n- D. /livez 503, /readyz 200","notes":"Answer: B. If anyone picks A, return to the restart-loop row of the table.","minutes":null,"lo":["LO3"]},{"id":"lab-1-4","n":44,"title":"Health and readiness checks","kind":"lab","session":4,"hash":"beb42967","md":"#### [day1#lab-1-4] Health and readiness checks\n\nLab 1.4 · 25 min\n\nAdd health and readiness checks and show how they differ when the model file is missing.\n\n[D1_4_health_readiness.html](https://sdaiaacademy.github.io/ae-205/labs/D1_4_health_readiness.html)\n\n- [ ] See the old health check say OK with no model (4 min)\n- [ ] Load and warm the model in the lifespan (7 min)\n- [ ] Write /livez and /readyz (6 min)\n- [ ] Test both with the model file missing (6 min)\n- [ ] Check (2 min)\n- [ ] ✱ Stretch: Make /readyz fail when the warm-up prediction disagrees with the artefact's reference prediction","notes":"AI policy: tutor. Usual problems: a `/livez` that calls `/readyz`; leaving the lazy load in the route as well; background servers from earlier labs on port 8000 (`kill %1`). Solution: `labs/solutions/S1_4.py`.","minutes":null,"lo":[]},{"id":"wrap-up","n":45,"title":"Three things to keep from today","kind":"content","session":4,"hash":"767d066b","md":"#### [day1#wrap-up] Three things to keep from today\n\n*Day 1 · wrap-up*\n\n- **The rule is part of the model.** An artefact holds the file, the signature, the decision rule and the pins, and proves itself on reference predictions.\n- **Versions never change.** Every answer names its version; the registry turns the version into data, code and evidence.\n- **The contract is tested.** Validation, typed errors, and two checks that say alive and ready separately.","notes":"Ask each participant to say which of the three their own team does least. Tomorrow the service goes into a container image and onto a cluster.","minutes":null,"lo":["LO1","LO2","LO3"]},{"id":"next","n":46,"title":"Day 2: containers and a cluster","kind":"content","session":4,"hash":"a6796a73","md":"#### [day1#next] Day 2: containers and a cluster\n\n*Next*\n\n- Start your container runtime (Docker or Podman) and check that `docker run hello-world` works\n- Install kind, k3d or minikube and `kubectl`; the setup notes are in `labs/README.md`\n- Lab 2.1's container file is written without AI help: read the pre-work on layers again","notes":"Ask anyone whose laptop cannot run containers to say so tonight: Day 2's container steps then run on a neighbour's machine or the trainer's demonstration, and every other step still runs with uv.","minutes":null,"lo":["LO4"]}],"activities":[{"id":"check-artefact-q1","slide":"check-artefact","type":"single","prompt":"A colleague exports a churn model as model.skops, signature.json and requirements.txt with exact pins. A clean environment loads it and reproduces 7 of 10 reference predictions. The notebook ranked customers and called the top 5% at risk. What is missing?","options":[{"key":"A","text":"A safer format than skops"},{"key":"B","text":"Looser pins, so that the newest versions install"},{"key":"C","text":"The decision rule: the top-5% cut-off that turned scores into labels"},{"key":"D","text":"Twenty reference predictions instead of ten"}],"correct":[2],"explanation":"The model file holds the scores; the notebook's rule that turns them into labels is part of the model and belongs in the artefact.","misconceptions":["Blames the format: skops loads the same fitted pipeline the notebook had","The pins are exact and the environment loaded them: versions are not the difference","","More reference claims would show the same gap more precisely, not close it"],"lo":["LO2"]},{"id":"check-registry-q1","slide":"check-registry","type":"single","prompt":"Adel retrains Farz 1.0.0 with the same code on one more month of claims. Production names farz 1.0.0 in its manifest. What should be registered?","options":[{"key":"A","text":"A new version, 1.0.1 or 1.1.0, with the new data hash, while production keeps 1.0.0"},{"key":"B","text":"The new file as 1.0.0, so production picks it up"},{"key":"C","text":"Nothing: the code did not change"},{"key":"D","text":"Move the champion alias to the new file"}],"correct":[0],"explanation":"New data makes a new model; a new model is a new version with its own evidence, released on purpose.","misconceptions":["","Treats a version as a slot to refresh: production would change model with no release","Thinks lineage is only about code: the data changed, so the model did","An alias move with no new version leaves no record of what the new file is"],"lo":["LO2"]},{"id":"check-contract-q1","slide":"check-contract","type":"single","prompt":"The claims system starts sending \"fraud_flag\": true with some claims. Farz's contract does not list the field. What should the service do?","options":[{"key":"A","text":"Ignore the field and triage the claim"},{"key":"B","text":"Pass it to the model as an eleventh feature"},{"key":"C","text":"Answer 500, prediction-failed"},{"key":"D","text":"Answer 422, validation-error, naming fraud_flag"}],"correct":[3],"explanation":"The caller thinks the field matters; a validation error naming it starts the conversation about whether it should.","misconceptions":["Silently dropping it lets the caller believe the flag changed the triage","The model has no input for it: passing it on changes nothing and hides the gap","A 500 says the service broke, and the caller will retry the same claim",""],"lo":["LO3"]},{"id":"check-health-q1","slide":"check-health","type":"single","prompt":"A new Farz pod starts, but its model file was copied incompletely. The process is running and answers HTTP. What should /livez and /readyz answer?","options":[{"key":"A","text":"/livez 503, /readyz 503"},{"key":"B","text":"/livez 200, /readyz 503 with the reason"},{"key":"C","text":"/livez 200, /readyz 200, then 503 on each prediction"},{"key":"D","text":"/livez 503, /readyz 200"}],"correct":[1],"explanation":"The process is fine and the model is not: stop the traffic, keep the process, and say why.","misconceptions":["A liveness failure restarts the pod, and a restart cannot fix a bad file: a restart loop","","Ready with a bad model sends every claim to a service that cannot triage it","Readiness is the check that guards traffic; liveness failing alone would restart a pod that could not serve anyway"],"lo":["LO3"]}],"ai":{"context":{"course":"../context/course.md","courseJs":"../context/course.js","day":"day1.md","llms":"../llms.txt"},"tasks":[],"tools":[]},"bridge":{"allowedOrigins":[]},"features":{},"strings":{}}</script>
+<script src="../_engine/academy.js"></script>
+</body>
+</html>

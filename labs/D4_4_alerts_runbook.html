@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-ax="lab" data-track="ai-engineering">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 4.4 · Two alerts and a runbook · Deploying AI Services: Containers, Serving and Monitoring</title>
+<meta name="generator" content="SDAIA Academy engine 1.0.0">
+<link rel="icon" href="../_engine/icon.svg">
+<link rel="alternate" type="text/markdown" href="D4_4_alerts_runbook.md">
+<link rel="describedby" href="../llms.txt">
+<link rel="stylesheet" href="../_engine/academy.css">
+</head>
+<body>
+<header>
+<div class="wrap">
+<div class="top"><div class="logo"></div><nav><a href="../index.html">Course page</a><a href="../slides/day4.html#lab-4-4">Back to the slides</a></nav></div>
+<span class="tag">Lab 4.4</span>
+<h1>Two alerts and a runbook</h1>
+<p>Write two alert rules and a one-page runbook for the on-call engineer, then choose the capstone model.</p>
+<div class="meta"><span>25 minutes</span><span>Day 4</span><span>Session 4: Alerts and a runbook</span></div>
+</div>
+</header>
+<main class="wrap">
+<article class="lab" data-lab="4.4">
+  <div class="box goal">
+    <h3>Goal</h3>
+    <p>Write two alert rules for Farz, one on the error ratio and one on the 95th-percentile latency, prove on a recorded series that they fire on the real problems and stay quiet on a one-minute blip, and write the one-page runbook the on-call engineer opens when they fire.</p>
+  </div>
+
+  <h2>What you need</h2>
+  <ul>
+    <li>The lab folder <code>rifd-labs/4.4</code>: an empty rule group in <code>monitoring/alerts.yml</code>, <code>RUNBOOK.md</code> and <code>CAPSTONE.md</code> to fill</li>
+    <li>The recording <code>../data/recordings/spike.jsonl</code>: 30 minutes of Farz's metrics, one scrape every 15 seconds, with a latency blip at minute 6, an error spike from minute 12 to 18 and a sustained latency rise from minute 22</li>
+    <li>AI policy: off for the first attempt at the two rules. Write them yourself, test them, then compare with an assistant if you want to.</li>
+  </ul>
+
+  <div class="step">
+    <h3>Write the two rules without AI help <span class="min">8 min</span></h3>
+    <p>In <code>monitoring/alerts.yml</code>, write <code>FarzErrorRatioHigh</code>: the rate of triage requests with a 5xx status divided by the rate of all triage requests, above 0.01. Write <code>FarzLatencyP95High</code>: the 95th percentile from the histogram, above 0.15. Give each a <code>for:</code> duration, a <code>severity</code> label and a <code>runbook_url</code> annotation pointing at a section of <code>RUNBOOK.md</code>.</p>
+  </div>
+
+  <div class="step">
+    <h3>Test them on the recorded spike <span class="min">6 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">cd rifd-labs/4.4
+uv run python tools/promlite.py rules --series ../data/recordings/spike.jsonl --rules monitoring/alerts.yml</code></pre>
+    <p>Each rule must fire on its problem and not at minute 6. If the latency rule fires on the blip, change its window or its <code>for:</code> and test again. Real Prometheus tests rules the same way with <code>promtool test rules</code>.</p>
+  </div>
+
+  <div class="step">
+    <h3>Write the one-page runbook <span class="min">8 min</span></h3>
+    <p>Fill <code>RUNBOOK.md</code>: who is accountable for a rollback decision, then for each alert what the caller sees, the first three checks, when to roll back and how, and who to tell.</p>
+  </div>
+
+  <div class="step">
+    <h3>Choose the capstone model; check <span class="min">3 min</span></h3>
+    <p>In <code>CAPSTONE.md</code>, name the model you will take to a monitored service in the capstone, why, and the latency objective you will defend.</p>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run ../lab.py check 4.4</code></pre>
+  </div>
+
+  <div class="step stretch">
+    <h3>✱ Stretch</h3>
+    <p>Add a burn-rate alert on the error objective over two windows and test it on the same recording.</p>
+  </div>
+
+  <h2>Check yourself</h2>
+  <ol class="checks">
+    <li>Which of your two settings, the rate window or the <code>for:</code> duration, kept the latency rule quiet at minute 6?</li>
+    <li>The error rule fired two minutes after the spike began. Is that too slow for Rifd?</li>
+    <li>The on-call engineer sees FarzErrorRatioHigh ten minutes after a release. What does the runbook let them do before they reach Munira?</li>
+  </ol>
+
+  <details class="instructor">
+    <summary>For the trainer</summary>
+    <p>In the course's run the reference rules (error ratio over 1m with <code>for: 2m</code>; 95th percentile over 5m with <code>for: 5m</code>) fired from minute 14.0 to 18.8 and from minute 28.0 to the end, and not at minute 6. Without any <code>for:</code> they fired from minute 12.0 and from minute 23.0, and the 5-minute window alone still kept the blip out. With a 1-minute latency window and no <code>for:</code>, the latency rule fired on the blip from minute 6.0 to 7.8; adding <code>for: 2m</code> to that rule silenced the blip and fired from minute 24.0.</p>
+    <p>So both settings trade speed for quiet: tell participants to choose them from what the caller feels and how fast the team can act. Answers: depends on the rules they wrote, which is the point of testing; two minutes is within Munira's five-minute rollback limit; roll back first when a written criterion holds, then tell Munira. Solution: <code>labs/solutions/S4_4.py</code>.</p>
+  </details>
+</article>
+<nav class="pager"><a href="D4_3_drift.html" rel="prev">← Previous lab</a></nav>
+</main>
+<footer><div class="wrap">SDAIA Academy · AI Engineering Track · Deploying AI Services: Containers, Serving and Monitoring<br><span class="muted">Course version 2027.1.0 · engine 1.0.0 · built 2026-11-15 · commit fec8449</span></div></footer>
+<script type="application/json" id="academy-data">{"v":1,"engine":"1.0.0","build":{"at":"2026-11-15T09:27:24Z","version":"2027.1.0","commit":"fec8449"},"course":{"id":"ae-205","code":"AE-205","title":"Deploying AI Services: Containers, Serving and Monitoring","track":"ai-engineering","lang":"en","dir":"ltr","url":"https://sdaiaacademy.github.io/ae-205/","repo":"SDAIAAcademy/ae-205","home":"../index.html"},"lab":{"id":"4.4","title":"Two alerts and a runbook","summary":"Write two alert rules and a one-page runbook for the on-call engineer, then choose the capstone model.","minutes":25,"day":4,"unit":"Day 4","session":4,"deck":"../slides/day4.html#lab-4-4","prev":"D4_3_drift.html","next":null,"alt":{}},"ai":{"context":{"course":"../context/course.md","courseJs":"../context/course.js","day":null,"llms":"../llms.txt"},"tasks":[],"tools":[]},"features":{},"strings":{}}</script>
+<script src="../_engine/academy.js"></script>
+</body>
+</html>

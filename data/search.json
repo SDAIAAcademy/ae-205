@@ -1,0 +1,1516 @@
+{
+  "v": 1,
+  "engine": "1.0.0",
+  "build": {
+    "at": "2026-11-15T09:27:24Z",
+    "version": "2027.1.0",
+    "commit": "fec8449"
+  },
+  "lang": "en",
+  "dir": "ltr",
+  "slides": [
+    {
+      "deck": "day1",
+      "id": "title",
+      "n": 1,
+      "session": 0,
+      "title": "Package and serve",
+      "text": "SDAIA Academy · Deploying AI Services: Containers, Serving and Monitoring Package and serve Day 1: From a notebook pickle to a versioned API that checks its inputs and says when it is ready AI Engineering Track4 teaching days + capstone day4 sessions · 4 labsAE-205",
+      "href": "../slides/day1.html#title"
+    },
+    {
+      "deck": "day1",
+      "id": "agenda",
+      "n": 2,
+      "session": 0,
+      "title": "Package and serve",
+      "text": "Today Package and serve Session 1 · From notebook to artefact The path from a trained model to a served prediction, serialisation formats, signatures, pins and the decision logic that hides in a notebook Session 2 · A registry for model versions Immutable versions with metrics, tags and lineage, aliases for champion and challenger, and loading by version Session 3 · A prediction API with a contract Online, batch and streaming prediction, a contract written first, input validation, typed errors and a version in the path Session 4 · Health, readiness and warm-up Liveness and readiness as two questions, loading and warming the model at start, and what a service does when its model file is missing",
+      "href": "../slides/day1.html#agenda"
+    },
+    {
+      "deck": "day1",
+      "id": "meet-rifd",
+      "n": 3,
+      "session": 0,
+      "title": "Rifd's claims team wants two notebook models in service",
+      "text": "The case study Rifd's claims team wants two notebook models in service Farz · triage Every new motor, health or property claim gets fast track, standard or investigate. Shabih · similar claims An adjuster describes a claim and gets the five most similar past claims. Munira Al-Ajmi , head of claims operations: owns the latency objective and decides rollbacks Adel Al-Shaikh , data scientist: trained both models in a notebook Ghaida Al-Ruqi , on-call platform engineer Bassam Al-Jaber , data protection officer You : the engineer who takes the models from the notebook to a monitored service",
+      "href": "../slides/day1.html#meet-rifd"
+    },
+    {
+      "deck": "day1",
+      "id": "s1",
+      "n": 4,
+      "session": 1,
+      "title": "From notebook to artefact",
+      "text": "Session 1 From notebook to artefact Name the artefact, image, registry, runtime, endpoint and monitor on a deployment path Convert a notebook pickle into an artefact with a signature, pins and its decision rule Prove an artefact by reloading it in a clean environment against reference predictions 01",
+      "href": "../slides/day1.html#s1"
+    },
+    {
+      "deck": "day1",
+      "id": "path-to-prediction",
+      "n": 5,
+      "session": 1,
+      "title": "Six things stand between a trained model and a served prediction",
+      "text": "The path Six things stand between a trained model and a served prediction Artefact the model, its signature, its pins → Registry versions you can name → Image code, libraries, artefact → Runtime a cluster runs the image → Endpoint a versioned API → Monitor metrics, logs, traces This course builds each box for Farz, one day at a time: artefact and endpoint today, image and runtime tomorrow, the monitor on Days 3 and 4.",
+      "href": "../slides/day1.html#path-to-prediction"
+    },
+    {
+      "deck": "day1",
+      "id": "the-handover",
+      "n": 6,
+      "session": 1,
+      "title": "A notebook hand-over is a pickle, a script and a number",
+      "text": "What you are given A notebook hand-over is a pickle, a script and a number Adel hands over farz_notebook.pkl, the fitted pipeline train_triage.py, the notebook as a script macro F1 0.728 on 10,000 held-out claims Nobody wrote down which library versions load it which inputs it expects, with which types what the claims team does with the probabilities What goes wrong. The model \"works on my machine\" because the machine is the missing documentation.",
+      "href": "../slides/day1.html#the-handover"
+    },
+    {
+      "deck": "day1",
+      "id": "serialisation-formats",
+      "n": 7,
+      "session": 1,
+      "title": "A model file is either data or a program",
+      "text": "Serialisation formats A model file is either data or a program Format What loading does Portable across languages Use it for pickle, joblib imports and calls whatever the file names no files you made yourself, once skops rebuilds only types on a trusted list no (Python, scikit-learn) scikit-learn models you share ONNX reads a graph of operators yes serving outside Python framework formats weights plus a known architecture within the framework deep learning models",
+      "href": "../slides/day1.html#serialisation-formats"
+    },
+    {
+      "deck": "day1",
+      "id": "pickle-is-code",
+      "n": 8,
+      "session": 1,
+      "title": "Read what a pickle imports before you load it",
+      "text": "Lab 1.1 · step 2 Read what a pickle imports before you load it $ uv run python -m pickletools ../notebook/farz_notebook.pkl | grep sklearn sklearn.feature_extraction._dict_vectorizer sklearn.linear_model._logistic sklearn.pipeline sklearn.preprocessing._data Load the pickle once, where it was made or from someone you trust, and save it again in a safer format. skops says what it does not trust. Farz 1.1.0, a boosted model, holds one type that is not on the default list; the course's loader accepts it by name.",
+      "href": "../slides/day1.html#pickle-is-code"
+    },
+    {
+      "deck": "day1",
+      "id": "artefact-folder",
+      "n": 9,
+      "session": 1,
+      "title": "Four files, each the answer to a question someone will ask",
+      "text": "An artefact Four files, each the answer to a question someone will ask model.skops What computes the probabilities? Saved so that loading runs no code. signature.json What goes in and comes out? Ten input fields with types, three labels out. metadata.json Which version, which data, which decision rule, which sha256, which ten reference predictions? requirements.txt Which exact library versions load it? Six lines with ==.",
+      "href": "../slides/day1.html#artefact-folder"
+    },
+    {
+      "deck": "day1",
+      "id": "hidden-decision-rule",
+      "n": 10,
+      "session": 1,
+      "title": "The pickle alone reproduced 8 of the notebook's 10 predictions",
+      "text": "Lab 1.1 · the planted problem The pickle alone reproduced 8 of the notebook's 10 predictions 8 / 10 reference predictions matched before the rule was exported INVESTIGATE_AT = 0.30 def label_from(proba): if proba[\"investigate\"] >= INVESTIGATE_AT: return \"investigate\" return max(proba, key=proba.get) CLM-041177: investigate 0.42, standard 0.57. The notebook says investigate; the pickle says standard.",
+      "href": "../slides/day1.html#hidden-decision-rule"
+    },
+    {
+      "deck": "day1",
+      "id": "pins-not-lock",
+      "n": 11,
+      "session": 1,
+      "title": "The project's lock file and the artefact's pins answer different questions",
+      "text": "Recap from FN-102, one step further The project's lock file and the artefact's pins answer different questions uv.lock (FN-102) Every package of the project, for every platform: rebuilds the environment that develops and serves the service. requirements.txt of the artefact The six libraries that load this model file, at the versions that wrote it: scikit-learn==1.9.1, numpy==2.5.4, skops==0.16.0 and three more. Proof, not belief. An environment with only the pins must reproduce the ten reference predictions.",
+      "href": "../slides/day1.html#pins-not-lock"
+    },
+    {
+      "deck": "day1",
+      "id": "clean-reload",
+      "n": 12,
+      "session": 1,
+      "title": "A clean environment holds the pins and nothing else",
+      "text": "A reproducible build A clean environment holds the pins and nothing else $ uv run --isolated --no-project --with-requirements artefacts/farz-1.0.0/requirements.txt \\ python tools/check_reload.py artefacts/farz-1.0.0 farz 1.0.0 loaded with pinned versions; 10 of 10 reference predictions match ok CLM-047849 expected investigate got investigate ok CLM-049970 expected fast_track got fast_track ...",
+      "href": "../slides/day1.html#clean-reload"
+    },
+    {
+      "deck": "day1",
+      "id": "check-artefact",
+      "n": 13,
+      "session": 1,
+      "title": "What is missing from this artefact?",
+      "text": "Checkpoint What is missing from this artefact? A colleague exports a churn model as model.skops, signature.json and requirements.txt with exact pins. A clean environment loads it and reproduces 7 of 10 reference predictions. The notebook ranked customers and called the top 5% at risk. What is missing? A safer format than skops Looser pins, so that the newest versions install The decision rule: the top-5% cut-off that turned scores into labels Twenty reference predictions instead of ten",
+      "href": "../slides/day1.html#check-artefact"
+    },
+    {
+      "deck": "day1",
+      "id": "lab-1-1",
+      "n": 14,
+      "session": 1,
+      "title": "Export Farz as an artefact",
+      "text": "Lab 1.1 · 25 min Export Farz as an artefact Export the claims-triage model with its signature and pinned dependencies and reload it in a clean environment, reproducing ten reference predictions. D1_1_export_artefact.html Build the workspace and open lab 1.1 4 min Load the notebook pickle and read what it needs 5 min Export with a signature, pins and the decision rule 8 min Reload in a clean environment; match ten predictions 6 min Check 2 min ✱ Stretch: Open the pickle with pickletools and list the imports it would run on load",
+      "href": "../slides/day1.html#lab-1-1"
+    },
+    {
+      "deck": "day1",
+      "id": "s2",
+      "n": 15,
+      "session": 2,
+      "title": "A registry for model versions",
+      "text": "Session 2 A registry for model versions Register a model version with metrics, a data hash and a commit Explain why a registered version is never overwritten Load a model by version and by alias and say when to use each 02",
+      "href": "../slides/day1.html#s2"
+    },
+    {
+      "deck": "day1",
+      "id": "why-registry",
+      "n": 16,
+      "session": 2,
+      "title": "A registry answers \"which model gave this answer?\" in one lookup",
+      "text": "Why a registry A registry answers \"which model gave this answer?\" in one lookup An adjuster disputes a triage: which version scored that claim, trained on which data? A canary misbehaves: what exactly changed between the two versions? An auditor asks for the model that ran in March: can you load it today? Two teams both say \"the new model\": are they talking about the same file? What goes wrong. A folder called final_v2_really on a shared drive answers none of these.",
+      "href": "../slides/day1.html#why-registry"
+    },
+    {
+      "deck": "day1",
+      "id": "versions-never-change",
+      "n": 17,
+      "session": 2,
+      "title": "A registered version never changes",
+      "text": "Lab 1.2 · step 3 A registered version never changes $ uv run python -m rifd.registry register --name farz --version 1.0.0 --from models/farz-1.1.0 refused: farz 1.0.0 is already registered and versions never change: register farz with a new version A release log, a canary comparison and an incident note all say \"farz 1.0.0\". If the name could point at another file, none of them could be checked.",
+      "href": "../slides/day1.html#versions-never-change"
+    },
+    {
+      "deck": "day1",
+      "id": "what-a-version-carries",
+      "n": 18,
+      "session": 2,
+      "title": "A version carries its evidence and its lineage",
+      "text": "Metrics and tags A version carries its evidence and its lineage Field Farz 1.0.0 in the course's run Answers sha256 of the model file ee8e2221b179… is this the file that was registered? metrics macro F1 0.728, investigate recall 0.746 how good was it when registered? tag data_sha256 hash of claims.csv which data trained it? tag trained_by Adel Al-Shaikh whom do I ask? tag source notebook/train_triage.py which code made it?",
+      "href": "../slides/day1.html#what-a-version-carries"
+    },
+    {
+      "deck": "day1",
+      "id": "two-versions",
+      "n": 19,
+      "session": 2,
+      "title": "1.1.0 is better than 1.0.0, but only just",
+      "text": "The two supplied versions 1.1.0 is better than 1.0.0, but only just 1.0.0 macro F1 0.728 1.1.0 macro F1 0.735 1.0.0 investigate recall 0.746 1.1.0 investigate recall 0.747 Decide on live evidence. A gap this small on one held-out set does not justify a release by itself; Day 4's canary does.",
+      "href": "../slides/day1.html#two-versions"
+    },
+    {
+      "deck": "day1",
+      "id": "aliases",
+      "n": 20,
+      "session": 2,
+      "title": "An alias moves; a version does not",
+      "text": "Aliases An alias moves; a version does not farz@champion → 1.0.0 Moving the alias changes what every reader of the alias loads, with no deployment. farz 1.0.0 Always the same file. A rollback is a change of one line in the manifest, and the manifest says what runs. Rifd's rule. Production names a version; staging and the weekly batch may follow champion.",
+      "href": "../slides/day1.html#aliases"
+    },
+    {
+      "deck": "day1",
+      "id": "registry-tools",
+      "n": 21,
+      "session": 2,
+      "title": "Folder registry, MLflow and git tags share one model",
+      "text": "The same ideas, other tools Folder registry, MLflow and git tags share one model Idea rifd.registry (the labs) MLflow Git repository of artefacts A model --name farz registered model a folder A version --version 1.0.0 model version an annotated tag Evidence metrics, tags run metrics, tags files in the commit A pointer that moves alias alias a branch or a file of aliases",
+      "href": "../slides/day1.html#registry-tools"
+    },
+    {
+      "deck": "day1",
+      "id": "lineage",
+      "n": 22,
+      "session": 2,
+      "title": "From one prediction back to the data, in four hops",
+      "text": "Lineage From one prediction back to the data, in four hops A response \"model\": {\"version\": \"1.0.0\"} → The registry farz 1.0.0, sha256 → The tags data_sha256, source → The data claims.csv, 40,000 rows Session 3 puts the version in every response, so the first hop is always there.",
+      "href": "../slides/day1.html#lineage"
+    },
+    {
+      "deck": "day1",
+      "id": "check-registry",
+      "n": 23,
+      "session": 2,
+      "title": "Retrained on one more month",
+      "text": "Checkpoint Retrained on one more month Adel retrains Farz 1.0.0 with the same code on one more month of claims. Production names farz 1.0.0 in its manifest. What should be registered? A new version, 1.0.1 or 1.1.0, with the new data hash, while production keeps 1.0.0 The new file as 1.0.0, so production picks it up Nothing: the code did not change Move the champion alias to the new file",
+      "href": "../slides/day1.html#check-registry"
+    },
+    {
+      "deck": "day1",
+      "id": "lab-1-2",
+      "n": 24,
+      "session": 2,
+      "title": "Register two versions",
+      "text": "Lab 1.2 · 25 min Register two versions Register two supplied model versions with metrics and tags and load one by version. D1_2_registry.html Read the two supplied artefacts and their metrics 4 min Register 1.0.0 and 1.1.0 with tags and a data hash 8 min Try to overwrite 1.0.0 and read the refusal 3 min Set the champion alias; load by version and by alias 7 min Check 3 min ✱ Stretch: Write the same two registrations as MLflow calls, or as git tags on an artefact repository",
+      "href": "../slides/day1.html#lab-1-2"
+    },
+    {
+      "deck": "day1",
+      "id": "s3",
+      "n": 25,
+      "session": 3,
+      "title": "A prediction API with a contract",
+      "text": "Session 3 A prediction API with a contract Choose online, batch or streaming prediction for a use case Validate a request against a written contract before the model sees it Return typed errors that a caller can act on 03",
+      "href": "../slides/day1.html#s3"
+    },
+    {
+      "deck": "day1",
+      "id": "serving-patterns",
+      "n": 26,
+      "session": 3,
+      "title": "Online, batch or streaming: the caller decides",
+      "text": "Serving patterns Online, batch or streaming: the caller decides Pattern The caller At Rifd What matters Online waits for the answer Farz triages a claim as it is filed latency, availability Batch reads the results later every night, re-score open claims for the weekly review throughput, cost, completeness Streaming an event arrives, a result is published score each claim update from the claims system's event queue ordering, back-pressure, duplicates",
+      "href": "../slides/day1.html#serving-patterns"
+    },
+    {
+      "deck": "day1",
+      "id": "contract-first",
+      "n": 27,
+      "session": 3,
+      "title": "Write the contract before the code, and test the code against it",
+      "text": "Contract first Write the contract before the code, and test the code against it | amount_sar | number | over 0, up to 5,000,000 | | vehicle_age_years | integer | 0 to 60; motor: needed | | in_network | boolean | health: needed | | member | object | never sent to the model, never logged | Agreed with the claims system's team: they build against it while you build the service Every rule becomes a test in tests/test_contract.py A change that breaks a caller is a new major version of the path",
+      "href": "../slides/day1.html#contract-first"
+    },
+    {
+      "deck": "day1",
+      "id": "validate-before-model",
+      "n": 28,
+      "session": 3,
+      "title": "Every field is checked before the model sees it",
+      "text": "Input validation Every field is checked before the model sees it class Claim(BaseModel): model_config = ConfigDict(extra=\"forbid\") line: Literal[\"motor\", \"health\", \"property\"] amount_sar: float = Field(gt=0, le=5_000_000) vehicle_age_years: int | None = Field(default=None, ge=0, le=60) @model_validator(mode=\"after\") def by_line(self): if self.line == \"motor\" and self.vehicle_age_years is None: raise ValueError(\"a motor claim needs vehicle_age_years\") return self",
+      "href": "../slides/day1.html#validate-before-model"
+    },
+    {
+      "deck": "day1",
+      "id": "typed-errors",
+      "n": 29,
+      "session": 3,
+      "title": "A caller switches on the error's type, never on its text",
+      "text": "Typed errors A caller switches on the error's type, never on its text type status The caller validation-error 422 fixes the claim; never retries it as it is model-unavailable 503 retries later, or sends the claim to manual triage dependency-failed 502 retries later prediction-failed 500 reports the request id What goes wrong. A 200 with \"error\": \"bad input\" in the body: every dashboard counts it as a success.",
+      "href": "../slides/day1.html#typed-errors"
+    },
+    {
+      "deck": "day1",
+      "id": "problem-details",
+      "n": 30,
+      "session": 3,
+      "title": "One shape for every error: RFC 9457",
+      "text": "Problem details One shape for every error: RFC 9457 { \"type\": \"urn:rifd:problem:validation-error\", \"title\": \"The claim does not match the contract\", \"status\": 422, \"detail\": \"1 field(s) failed validation\", \"instance\": \"/v1/triage\", \"errors\": [{\"field\": \"line\", \"message\": \"Input should be 'motor', 'health' or 'property'\"}], \"request_id\": \"3f1c9a0d7e2b4c55\" }",
+      "href": "../slides/day1.html#problem-details"
+    },
+    {
+      "deck": "day1",
+      "id": "versioned-path",
+      "n": 31,
+      "session": 3,
+      "title": "The path carries the contract's version; the body carries the model's",
+      "text": "Versions in two places The path carries the contract's version; the body carries the model's /v1/triage Changes only when the contract breaks a caller. /v2/ runs beside /v1/ until every caller has moved. \"model\": {\"version\": \"1.1.0\"} Changes with every release, contract unchanged. The first hop of lineage, and the field Day 4's canary comparison groups by.",
+      "href": "../slides/day1.html#versioned-path"
+    },
+    {
+      "deck": "day1",
+      "id": "personal-fields-dropped",
+      "n": 32,
+      "session": 3,
+      "title": "The member's details are validated, then dropped before the model",
+      "text": "Personal data at the boundary The member's details are validated, then dropped before the model Request claim + description + member → Validated national id: 10 digits, starts 1 or 2 → model_view() the claim without member and text → Farz ten fields Data minimisation in code. What the model never receives, no model log or trace can leak.",
+      "href": "../slides/day1.html#personal-fields-dropped"
+    },
+    {
+      "deck": "day1",
+      "id": "contract-tests",
+      "n": 33,
+      "session": 3,
+      "title": "Sixteen contract tests, from all failing to all passing",
+      "text": "Lab 1.3 Sixteen contract tests, from all failing to all passing 0 → 16 of 16 contract tests passing, start state to finished, in the course's run valid motor and health claims, and the model version in the answer missing field, wrong type, out of range, unknown line, unknown field a motor claim without its vehicle age; a malformed national id a body that is not JSON; a request id on every response a model that fails to load: 503, model-unavailable",
+      "href": "../slides/day1.html#contract-tests"
+    },
+    {
+      "deck": "day1",
+      "id": "check-contract",
+      "n": 34,
+      "session": 3,
+      "title": "A claim with an extra field",
+      "text": "Checkpoint A claim with an extra field The claims system starts sending \"fraud_flag\": true with some claims. Farz's contract does not list the field. What should the service do? Ignore the field and triage the claim Pass it to the model as an eleventh feature Answer 500, prediction-failed Answer 422, validation-error, naming fraud_flag",
+      "href": "../slides/day1.html#check-contract"
+    },
+    {
+      "deck": "day1",
+      "id": "lab-1-3",
+      "n": 35,
+      "session": 3,
+      "title": "A versioned endpoint with a contract",
+      "text": "Lab 1.3 · 25 min A versioned endpoint with a contract Build a versioned prediction endpoint that validates inputs and returns typed errors, until the supplied contract tests pass. D1_3_prediction_api.html Run the contract tests against the naive endpoint 3 min Write the request and response schemas 8 min Return problem details for each error type 8 min Pass all contract tests 4 min Check 2 min ✱ Stretch: Add a batch endpoint that takes up to 100 claims and reports errors per item",
+      "href": "../slides/day1.html#lab-1-3"
+    },
+    {
+      "deck": "day1",
+      "id": "s4",
+      "n": 36,
+      "session": 4,
+      "title": "Health, readiness and warm-up",
+      "text": "Session 4 Health, readiness and warm-up Separate a liveness check from a readiness check Load and warm a model before the service accepts traffic Show the behaviour of each check when the model file fails to load 04",
+      "href": "../slides/day1.html#s4"
+    },
+    {
+      "deck": "day1",
+      "id": "two-questions",
+      "n": 37,
+      "session": 4,
+      "title": "\"Is it alive?\" and \"should it get traffic?\" are two questions",
+      "text": "Health and readiness \"Is it alive?\" and \"should it get traffic?\" are two questions /livez · liveness Can the process answer at all? If not, restart it. Never looks at the model or at a dependency. /readyz · readiness Is the model loaded, verified and warm? If not, send no traffic here, and do not restart. What goes wrong. One /health that says OK: traffic reaches a pod with no model, and every claim fails.",
+      "href": "../slides/day1.html#two-questions"
+    },
+    {
+      "deck": "day1",
+      "id": "what-the-cluster-does",
+      "n": 38,
+      "session": 4,
+      "title": "A wrong check turns a bad file into a restart loop",
+      "text": "What each failure means A wrong check turns a bad file into a restart loop Situation /livez /readyz The cluster Starting, model loading 200 503 waits; no traffic yet Model file missing or altered 200 503 keeps it out of service; you read why Process stuck no answer no answer restarts it Liveness that checks the model, file missing 503 503 restarts it, forever",
+      "href": "../slides/day1.html#what-the-cluster-does"
+    },
+    {
+      "deck": "day1",
+      "id": "lazy-loading",
+      "n": 39,
+      "session": 4,
+      "title": "Loading on the first request makes one caller pay for everyone",
+      "text": "Model loading and warm-up Loading on the first request makes one caller pay for everyone 64 ms to load and verify Farz 1.0.0 97 ms for its first prediction, the warm-up Load at start, verify the sha256, then make one warm-up prediction The warm-up is checked against the artefact's reference label Only then does /readyz say ready",
+      "href": "../slides/day1.html#lazy-loading"
+    },
+    {
+      "deck": "day1",
+      "id": "lifespan-load",
+      "n": 40,
+      "session": 4,
+      "title": "Load and warm in the lifespan, before the first request",
+      "text": "Lab 1.4 · step 2 Load and warm in the lifespan, before the first request @asynccontextmanager async def lifespan(app: FastAPI): logs.configure(s.log_file) load_farz(app) # load, verify sha256, warm up; never raises yield def load_farz(app): try: model = artefact.load(s.model_dir) warm = model.predict([model.meta[\"reference\"][0][\"input\"]]) ... app.state.ready = True except Exception as e: app.state.load_error = str(e) # alive, not ready, and says why",
+      "href": "../slides/day1.html#lifespan-load"
+    },
+    {
+      "deck": "day1",
+      "id": "missing-model",
+      "n": 41,
+      "session": 4,
+      "title": "With the model file missing, the service is alive and says why it is not ready",
+      "text": "Lab 1.4 · step 4 With the model file missing, the service is alive and says why it is not ready GET /livez 200 {\"status\": \"alive\"} GET /readyz 503 urn:rifd:problem:model-unavailable · no artefact at models/missing POST /v1/triage 503 urn:rifd:problem:model-unavailable tests tests/test_health.py: 5 passed",
+      "href": "../slides/day1.html#missing-model"
+    },
+    {
+      "deck": "day1",
+      "id": "time-to-ready",
+      "n": 42,
+      "session": 4,
+      "title": "Most of the time to ready is importing libraries, not loading the model",
+      "text": "Looking ahead to Day 2 Most of the time to ready is importing libraries, not loading the model In the course's runs, Farz took 11 to 22 seconds from process start to ready on a laptop Of that, loading the model took under a tenth of a second The rest was Python importing scikit-learn, skops and the web stack A cluster that gives up after five seconds restarts a healthy pod: Day 2 adds a startup probe",
+      "href": "../slides/day1.html#time-to-ready"
+    },
+    {
+      "deck": "day1",
+      "id": "check-health",
+      "n": 43,
+      "session": 4,
+      "title": "Which check fails?",
+      "text": "Checkpoint Which check fails? A new Farz pod starts, but its model file was copied incompletely. The process is running and answers HTTP. What should /livez and /readyz answer? /livez 503, /readyz 503 /livez 200, /readyz 503 with the reason /livez 200, /readyz 200, then 503 on each prediction /livez 503, /readyz 200",
+      "href": "../slides/day1.html#check-health"
+    },
+    {
+      "deck": "day1",
+      "id": "lab-1-4",
+      "n": 44,
+      "session": 4,
+      "title": "Health and readiness checks",
+      "text": "Lab 1.4 · 25 min Health and readiness checks Add health and readiness checks and show how they differ when the model file is missing. D1_4_health_readiness.html See the old health check say OK with no model 4 min Load and warm the model in the lifespan 7 min Write /livez and /readyz 6 min Test both with the model file missing 6 min Check 2 min ✱ Stretch: Make /readyz fail when the warm-up prediction disagrees with the artefact's reference prediction",
+      "href": "../slides/day1.html#lab-1-4"
+    },
+    {
+      "deck": "day1",
+      "id": "wrap-up",
+      "n": 45,
+      "session": 4,
+      "title": "Three things to keep from today",
+      "text": "Day 1 · wrap-up Three things to keep from today The rule is part of the model An artefact holds the file, the signature, the decision rule and the pins, and proves itself on reference predictions. Versions never change Every answer names its version; the registry turns the version into data, code and evidence. The contract is tested Validation, typed errors, and two checks that say alive and ready separately.",
+      "href": "../slides/day1.html#wrap-up"
+    },
+    {
+      "deck": "day1",
+      "id": "next",
+      "n": 46,
+      "session": 4,
+      "title": "Day 2: containers and a cluster",
+      "text": "Next Day 2: containers and a cluster Start your container runtime (Docker or Podman) and check that docker run hello-world works Install kind, k3d or minikube and kubectl; the setup notes are in labs/README.md Lab 2.1's container file is written without AI help: read the pre-work on layers again",
+      "href": "../slides/day1.html#next"
+    },
+    {
+      "deck": "day2",
+      "id": "title",
+      "n": 1,
+      "session": 0,
+      "title": "Containers and a cluster",
+      "text": "SDAIA Academy · Deploying AI Services: Containers, Serving and Monitoring Containers and a cluster Day 2: An image that is small, scanned and configured from outside, running on a local cluster AI Engineering Track4 teaching days + capstone day4 sessions · 4 labsAE-205",
+      "href": "../slides/day2.html#title"
+    },
+    {
+      "deck": "day2",
+      "id": "agenda",
+      "n": 2,
+      "session": 0,
+      "title": "Containers and a cluster",
+      "text": "Today Containers and a cluster Session 1 · Images that are small and reproducible Layers and the build cache, multi-stage builds from the lock file, slim bases, a non-root user and what to leave out Session 2 · Scanning and configuration What a scanner reads and reports, severities and fixed versions, secrets in image layers, and configuration from the environment Session 3 · Running on a local cluster Deployments, services and probes, requests and limits, rolling updates, and where a service may run under data rules Session 4 · Serving the embedding model An embedding model as a service: vectors and an index in memory, start-up time, a startup probe and a deployment of its own",
+      "href": "../slides/day2.html#agenda"
+    },
+    {
+      "deck": "day2",
+      "id": "s1",
+      "n": 3,
+      "session": 1,
+      "title": "Images that are small and reproducible",
+      "text": "Session 1 Images that are small and reproducible Read a container file and predict which layers a change rebuilds Write a multi-stage container file that installs from the lock file Measure image size and build time and explain the difference 01",
+      "href": "../slides/day2.html#s1"
+    },
+    {
+      "deck": "day2",
+      "id": "what-an-image-is",
+      "n": 4,
+      "session": 1,
+      "title": "An image is a stack of read-only layers and a few settings",
+      "text": "An image An image is a stack of read-only layers and a few settings Each RUN, COPY and ADD line adds a layer: the files it changed ENV, USER, CMD and EXPOSE only change the configuration, which anyone who pulls the image can read A container is the image plus one thin writable layer that disappears with it In the case study One image, rifd/claims:1.0.0, serves both Farz and Shabih; RIFD_SERVICE picks which one starts.",
+      "href": "../slides/day2.html#what-an-image-is"
+    },
+    {
+      "deck": "day2",
+      "id": "build-cache",
+      "n": 5,
+      "session": 1,
+      "title": "Change a file, and every layer after the line that copied it is rebuilt",
+      "text": "The build cache Change a file, and every layer after the line that copied it is rebuilt FROM python:3.12 WORKDIR /app COPY . . RUN pip install uv && uv sync COPY pyproject.toml uv.lock ./ RUN uv sync --frozen --no-dev --no-install-project COPY src ./src RUN uv sync --frozen --no-dev Order by how often things change. The lock changes rarely, the code often: copy the lock first and the dependency layer stays cached.",
+      "href": "../slides/day2.html#build-cache"
+    },
+    {
+      "deck": "day2",
+      "id": "multi-stage",
+      "n": 6,
+      "session": 1,
+      "title": "Build in one stage, ship only the result from a second",
+      "text": "Multi-stage builds Build in one stage, ship only the result from a second Stage 1 · build slim base, uv, the lock, uv sync --frozen --no-dev → COPY --from=build .venv, src; then models/ → Stage 2 · runtime a fresh slim base, user 10001, no uv, no caches Takeaway. Whatever the build needed and the service does not stays in stage 1 and never ships.",
+      "href": "../slides/day2.html#multi-stage"
+    },
+    {
+      "deck": "day2",
+      "id": "base-and-user",
+      "n": 7,
+      "session": 1,
+      "title": "A slim base and a non-root user cost nothing and remove a lot",
+      "text": "Two small lines A slim base and a non-root user cost nothing and remove a lot python:3.12-slim Debian with the minimum Python needs. The full python:3.12 image adds compilers and headers, which a service that installs wheels does not use and a scanner still reports. USER 10001 A process that escapes the service holds no root rights in the container. The cluster can enforce it with runAsNonRoot in the manifest. What goes wrong. A tag like python:3 or latest moves under you: pin the tag, or the digest when two builds must be identical.",
+      "href": "../slides/day2.html#base-and-user"
+    },
+    {
+      "deck": "day2",
+      "id": "dockerignore",
+      "n": 8,
+      "session": 1,
+      "title": "What the build never sees cannot leak into the image",
+      "text": "The build context What the build never sees cannot leak into the image .venv .git tests notebook runs secrets .env The build sends the folder to the builder; .dockerignore leaves paths out .venv is built for your laptop, not the image secrets and .env: a later COPY . by a colleague would ship them Tests and the notebook are evidence for the repository, not the runtime",
+      "href": "../slides/day2.html#dockerignore"
+    },
+    {
+      "deck": "day2",
+      "id": "measure-image",
+      "n": 9,
+      "session": 1,
+      "title": "Three numbers compare two container files",
+      "text": "Lab 2.1 · what to record Three numbers compare two container files Dockerfile.naive Dockerfile (multi-stage) Image size (docker image ls) your number your number; the check asks under 500 MB First build time your number your number Rebuild after a one-line code change reinstalls everything only the code layers Runs as root user 10001",
+      "href": "../slides/day2.html#measure-image"
+    },
+    {
+      "deck": "day2",
+      "id": "check-layers",
+      "n": 10,
+      "session": 1,
+      "title": "What does this change rebuild?",
+      "text": "Checkpoint What does this change rebuild? A container file copies pyproject.toml and uv.lock, runs uv sync --no-install-project, copies src, and runs uv sync again. A colleague edits one function in src/rifd/app.py and rebuilds. What runs again? Every line, from the base image down The copy of src and the second uv sync, which installs only the project The first uv sync, because the dependencies must be checked Nothing, because the dependencies did not change",
+      "href": "../slides/day2.html#check-layers"
+    },
+    {
+      "deck": "day2",
+      "id": "lab-2-1",
+      "n": 11,
+      "session": 1,
+      "title": "A multi-stage container file",
+      "text": "Lab 2.1 · 25 min A multi-stage container file Write a multi-stage container file and compare its size and build time with a naive one. D2_1_multi_stage_image.html Build the naive image; record size and time 5 min Write the multi-stage file without AI help 10 min Build it; record size, time and a rebuild after a code change 6 min Check 4 min ✱ Stretch: Pin the base image by digest and rebuild twice: do the two images have the same id?",
+      "href": "../slides/day2.html#lab-2-1"
+    },
+    {
+      "deck": "day2",
+      "id": "s2",
+      "n": 12,
+      "session": 2,
+      "title": "Scanning and configuration",
+      "text": "Session 2 Scanning and configuration Read a vulnerability report and pick the finding to fix first Fix a finding by moving to a fixed version and scan again Move a secret out of an image into configuration the runtime supplies 02",
+      "href": "../slides/day2.html#s2"
+    },
+    {
+      "deck": "day2",
+      "id": "what-a-scanner-reads",
+      "n": 13,
+      "session": 2,
+      "title": "A scanner matches what is installed against lists of known flaws",
+      "text": "Vulnerability scanning A scanner matches what is installed against lists of known flaws It reads the system packages of the base image the language packages: a lock file, or the installed environment It compares with advisory databases such as OSV and the GitHub advisories each advisory names affected versions and the version that fixes it A scan is a date. The same image scanned next month can report more: new advisories are published every day.",
+      "href": "../slides/day2.html#what-a-scanner-reads"
+    },
+    {
+      "deck": "day2",
+      "id": "read-a-report",
+      "n": 14,
+      "session": 2,
+      "title": "The supplied lock carries an h11 with a critical advisory",
+      "text": "Lab 2.2 · step 1 The supplied lock carries an h11 with a critical advisory $ uv run pip-audit -r runs/requirements-audit.txt --no-deps --disable-pip --aliases Found 2 known vulnerabilities in 1 package Name Version ID Fix Versions Aliases ---- ------- -------------- ------------ ----------------------------------- h11 0.14.0 PYSEC-2026-348 0.16.0 GHSA-vqfr-h8mv-ghfj, CVE-2025-43859 h11 0.14.0 PYSEC-2026-348 0.16.0 GHSA-vqfr-h8mv-ghfj, CVE-2025-43859 h11 parses HTTP/1.1 for uvicorn: it reads every request Farz receives One advisory, listed twice, rated critical by GitHub: lenient parsing of the line endings in chunked bodies allows request smuggling behind a proxy that parses differently",
+      "href": "../slides/day2.html#read-a-report"
+    },
+    {
+      "deck": "day2",
+      "id": "fix-first",
+      "n": 15,
+      "session": 2,
+      "title": "Fix the most severe finding that has a fix, then scan again",
+      "text": "Which finding first Fix the most severe finding that has a fix, then scan again 1 · Sort by severity and by whether the code path is reachable → 2 · Fix move to the fixed version: bound in pyproject, exact in the lock → 3 · Prove rescan, run the tests, rebuild → 4 · Record findings with no fix: advisory, reason, date to look again What goes wrong. Suppressing a finding in the scanner's configuration makes the report clean and leaves the flaw running.",
+      "href": "../slides/day2.html#fix-first"
+    },
+    {
+      "deck": "day2",
+      "id": "secret-in-layers",
+      "n": 16,
+      "session": 2,
+      "title": "A key in an ENV line is readable by anyone who can pull the image",
+      "text": "Secrets A key in an ENV line is readable by anyone who can pull the image ENV RIFD_LOOKUP_KEY=rifd-lookup-key-for-the-labs-only \\ RIFD_MODEL_DIR=/app/models/farz-1.0.0 docker history --no-trunc and docker inspect print it Deleting it in a later layer hides it, does not remove it Every pushed copy keeps it: rotate the key, then fix the file Supply it at run time. An environment variable from the runtime, a mounted file, or a cluster Secret; a key the build needs goes through BuildKit's --mount=type=secret.",
+      "href": "../slides/day2.html#secret-in-layers"
+    },
+    {
+      "deck": "day2",
+      "id": "config-from-env",
+      "n": 17,
+      "session": 2,
+      "title": "The service reads its settings; the runtime decides them",
+      "text": "Configuration The service reads its settings; the runtime decides them def _secret(name: str) -> str: \"\"\"A secret comes from the environment, or from a file the runtime mounts.\"\"\" if os.environ.get(name): return os.environ[name] path = Path(os.environ.get(name + \"_FILE\", \"secrets/lookup.key\")) return path.read_text(encoding=\"utf-8\").strip() if path.is_file() else \"\" lookup_key: str = field(default_factory=lambda: _secret(\"RIFD_LOOKUP_KEY\")) Same image in every environment; only the configuration differs secrets/ is in .gitignore and .dockerignore",
+      "href": "../slides/day2.html#config-from-env"
+    },
+    {
+      "deck": "day2",
+      "id": "check-scan",
+      "n": 18,
+      "session": 2,
+      "title": "Which finding do you fix first?",
+      "text": "Checkpoint Which finding do you fix first? A scan of the fraud-review image reports: high, in the HTTP parser, fixed in the next version; critical, in an image library the service never imports, no fix; medium, in the base image, fixed by a newer base. Where do you start? The critical one, because it is critical The medium one, because a new base is the easiest change Suppress all three and scan again next quarter The high one in the HTTP parser: it is reachable by every request and has a fix",
+      "href": "../slides/day2.html#check-scan"
+    },
+    {
+      "deck": "day2",
+      "id": "lab-2-2",
+      "n": 19,
+      "session": 2,
+      "title": "Scan, fix, configure",
+      "text": "Lab 2.2 · 25 min Scan, fix, configure Scan a supplied image, fix one critical finding and move secrets out of the image into configuration. D2_2_scan_and_config.html Scan the supplied image and read the report 6 min Fix the critical finding and scan again 7 min Find the key in the image history 4 min Read the key from configuration instead 5 min Check 3 min ✱ Stretch: Scan the multi-stage image of lab 2.1 and compare the counts by severity",
+      "href": "../slides/day2.html#lab-2-2"
+    },
+    {
+      "deck": "day2",
+      "id": "s3",
+      "n": 20,
+      "session": 3,
+      "title": "Running on a local cluster",
+      "text": "Session 3 Running on a local cluster Deploy a service with probes and resource limits to a single-node cluster Diagnose a pod that does not become ready from its events Decide where each service may run from its data classification 03",
+      "href": "../slides/day2.html#s3"
+    },
+    {
+      "deck": "day2",
+      "id": "cluster-objects",
+      "n": 21,
+      "session": 3,
+      "title": "You describe what should run; the cluster keeps it running",
+      "text": "A cluster in four objects You describe what should run; the cluster keeps it running Deployment How many copies of which image, with which settings; it replaces pods that die. Pod One running copy: a container with its probes and limits. Service One stable address in front of the ready pods that match its selector. ConfigMap and Secret Settings, and keys, given to the pods as variables or files.",
+      "href": "../slides/day2.html#cluster-objects"
+    },
+    {
+      "deck": "day2",
+      "id": "probes",
+      "n": 22,
+      "session": 3,
+      "title": "Three probes, three different actions",
+      "text": "Probes Three probes, three different actions Probe Farz asks When it fails, the cluster startupProbe /readyz every 2 s, up to 30 times restarts the container after a minute; holds the other probes until it passes readinessProbe /readyz every 5 s takes the pod out of the Service; does not restart it livenessProbe /livez every 10 s restarts the container A slow start is not a dead process. The startup probe gives the model time to load without loosening the liveness probe.",
+      "href": "../slides/day2.html#probes"
+    },
+    {
+      "deck": "day2",
+      "id": "requests-limits",
+      "n": 23,
+      "session": 3,
+      "title": "Requests place the pod; limits stop it from taking the node",
+      "text": "Requests and limits Requests place the pod; limits stop it from taking the node resources: requests: {cpu: 250m, memory: 256Mi} limits: {cpu: \"1\", memory: 512Mi} The scheduler places a pod on a node with room for its requests Over its CPU limit, a container is slowed down Over its memory limit, it is killed (OOMKilled) and restarted What goes wrong. No limits: one pod with a leak takes the node and its neighbours with it. Limits far below use: a restart loop under load.",
+      "href": "../slides/day2.html#requests-limits"
+    },
+    {
+      "deck": "day2",
+      "id": "pod-events",
+      "n": 24,
+      "session": 3,
+      "title": "A pod that does not start says why in its events",
+      "text": "Lab 2.3 · step 2 A pod that does not start says why in its events Status or event Usual cause Look at ErrImagePull, ImagePullBackOff the node cannot fetch the image: wrong tag, or latest with Always the image name and the pull policy CrashLoopBackOff the process exits at start kubectl logs --previous Readiness probe failed running, not ready: the model did not load the body of /readyz OOMKilled memory above the limit the limit against a measurement",
+      "href": "../slides/day2.html#pod-events"
+    },
+    {
+      "deck": "day2",
+      "id": "rolling-update",
+      "n": 25,
+      "session": 3,
+      "title": "A rolling update replaces pods one at a time, behind readiness",
+      "text": "Changing what runs A rolling update replaces pods one at a time, behind readiness 1 · New pod maxSurge 1: one extra pod with the new image → 2 · Ready? it joins the Service only when /readyz passes → 3 · Old pod out maxUnavailable 0: capacity never drops Takeaway. A version that never becomes ready never takes traffic: the rollout stops and the old pods keep serving.",
+      "href": "../slides/day2.html#rolling-update"
+    },
+    {
+      "deck": "day2",
+      "id": "replicas-autoscaling",
+      "n": 26,
+      "session": 3,
+      "title": "A fixed number of replicas is a decision; an autoscaler makes it from a metric",
+      "text": "Replicas and autoscaling A fixed number of replicas is a decision; an autoscaler makes it from a metric apiVersion: autoscaling/v2 kind: HorizontalPodAutoscaler spec: scaleTargetRef: {kind: Deployment, name: farz} minReplicas: 2 maxReplicas: 6 metrics: - type: Resource resource: name: cpu target: {type: Utilization, averageUtilization: 60} replicas: 2 in the Deployment: two pods, always The autoscaler compares a measured value with a target and sets the count: wanted = ceil(current × measured ÷ target) CPU utilisation is a share of the pod's request: no request, no autoscaling New pods take traffic only when ready: Farz's start-up time is the delay",
+      "href": "../slides/day2.html#replicas-autoscaling"
+    },
+    {
+      "deck": "day2",
+      "id": "placement",
+      "n": 27,
+      "session": 3,
+      "title": "The data each service holds decides where it may run",
+      "text": "Where may it run? The data each service holds decides where it may run The national Data Classification Policy has four levels: Top Secret, Secret, Restricted, Public Claims with names, national ids and health details: Rifd classifies them Restricted and keeps them on its in-Kingdom cluster A copy abroad is a transfer under the Personal Data Protection Law and its transfer regulation The lab's table Farz, Shabih and the dashboards: what each holds, its level, where it may run, and who signs. Bassam Al-Jaber signs with Munira Al-Ajmi.",
+      "href": "../slides/day2.html#placement"
+    },
+    {
+      "deck": "day2",
+      "id": "check-cluster",
+      "n": 28,
+      "session": 3,
+      "title": "Why is this pod not ready?",
+      "text": "Checkpoint Why is this pod not ready? A Farz pod shows Running with 0/1 ready. Its events repeat \"Readiness probe failed: HTTP probe failed with statuscode: 503\". The pod has never restarted. What is the most likely cause? The model did not load, so /readyz answers model-unavailable The image tag cannot be pulled The memory limit is too low The liveness probe path is wrong",
+      "href": "../slides/day2.html#check-cluster"
+    },
+    {
+      "deck": "day2",
+      "id": "lab-2-3",
+      "n": 29,
+      "session": 3,
+      "title": "Deploy to a local cluster",
+      "text": "Lab 2.3 · 25 min Deploy to a local cluster Deploy the supplied service image to a single-node cluster with probes and resource limits, and decide where each service may run. D2_3_local_cluster.html Create the cluster and load the image 5 min Apply the supplied manifest; read why it fails 5 min Add probes, limits and a pinned image 7 min Fill the placement table for three services 5 min Check 3 min ✱ Stretch: Change the image tag and watch a rolling update replace the pods one at a time",
+      "href": "../slides/day2.html#lab-2-3"
+    },
+    {
+      "deck": "day2",
+      "id": "s4",
+      "n": 30,
+      "session": 4,
+      "title": "Serving the embedding model",
+      "text": "Session 4 Serving the embedding model Serve a nearest-neighbour search behind a versioned endpoint Measure memory and time to ready for two models Decide whether two models share a deployment 04",
+      "href": "../slides/day2.html#s4"
+    },
+    {
+      "deck": "day2",
+      "id": "meet-shabih",
+      "n": 31,
+      "session": 4,
+      "title": "Shabih turns a description into 96 numbers and finds the nearest past claims",
+      "text": "The second model Shabih turns a description into 96 numbers and finds the nearest past claims Description \"Windscreen cracked by a stone on the highway\" → Encoder character n-grams, then 96 dimensions, unit length → Index 50,000 vectors in memory; dot product with each → Answer the k nearest: claim id, line, incident, score",
+      "href": "../slides/day2.html#meet-shabih"
+    },
+    {
+      "deck": "day2",
+      "id": "index-in-memory",
+      "n": 32,
+      "session": 4,
+      "title": "The index lives in memory, and loading it is the slow part",
+      "text": "What it costs The index lives in memory, and loading it is the slow part 19 MB 50,000 × 96 float32 numbers 586 ms Shabih's model load, against 60 ms for Farz +40 MiB memory at ready, 223 against 184 MiB Searching every vector is fine at this size. Beyond a few million, an approximate index (HNSW, IVF) trades a little recall for much less time.",
+      "href": "../slides/day2.html#index-in-memory"
+    },
+    {
+      "deck": "day2",
+      "id": "similar-contract",
+      "n": 33,
+      "session": 4,
+      "title": "/v1/similar returns claims, not people",
+      "text": "The contract /v1/similar returns claims, not people {\"description\": \"Windscreen cracked by a stone\", \"line\": \"motor\", \"k\": 3} {\"results\": [ {\"claim_id\": \"CLM-…\", \"line\": \"motor\", \"incident\": \"windscreen\", \"score\": 0.9}, …], \"model\": {\"name\": \"shabih\", \"version\": \"1.0.0\"}} Minimise at the source. The index keeps claim id, line and incident type only: no name, national id or description can leak through an answer it does not hold.",
+      "href": "../slides/day2.html#similar-contract"
+    },
+    {
+      "deck": "day2",
+      "id": "share-or-split",
+      "n": 34,
+      "session": 4,
+      "title": "Same image, separate deployments: the two models age differently",
+      "text": "One deployment or two? Same image, separate deployments: the two models age differently Farz Shabih Memory limit 512Mi 768Mi Startup probe budget 2 s × 30 2 s × 60 Scales with new claims adjusters' searches Released when the triage model changes the encoder or the index changes",
+      "href": "../slides/day2.html#share-or-split"
+    },
+    {
+      "deck": "day2",
+      "id": "check-shabih",
+      "n": 35,
+      "session": 4,
+      "title": "How should Shabih be deployed?",
+      "text": "Checkpoint How should Shabih be deployed? Shabih needs about 40 MiB more memory than Farz and loads ten times slower. Searches peak in the afternoon, when adjusters work; new claims arrive all day. The team wants to put both models in one pod to save a deployment. What do you advise? One pod with both models: fewer things to run Two images, because the models differ One image, two deployments, each with its own limits, startup probe and replica count Run Shabih as a nightly batch instead of a service",
+      "href": "../slides/day2.html#check-shabih"
+    },
+    {
+      "deck": "day2",
+      "id": "lab-2-4",
+      "n": 36,
+      "session": 4,
+      "title": "The similar-claims endpoint",
+      "text": "Lab 2.4 · 25 min The similar-claims endpoint Add the similar-claims endpoint and compare its memory use and start-up time with the classifier. D2_4_similar_claims.html Read the Shabih artefact and its index 4 min Add /v1/similar with a contract and no personal fields 9 min Measure memory and time to ready for both models 7 min Check 5 min ✱ Stretch: Halve the index with float16 vectors and measure what it saves and what it changes in the results",
+      "href": "../slides/day2.html#lab-2-4"
+    },
+    {
+      "deck": "day2",
+      "id": "wrap-up",
+      "n": 37,
+      "session": 4,
+      "title": "Three things to keep from today",
+      "text": "Day 2 · wrap-up Three things to keep from today Order layers by change Lock first, code last, two stages, a slim base and a non-root user. Scan, fix, rescan, record Fix what is reachable and fixable; secrets come from the runtime and leaked ones are rotated. Probes and limits are the contract with the cluster Ready decides traffic, alive decides restarts, and the data decides where it runs.",
+      "href": "../slides/day2.html#wrap-up"
+    },
+    {
+      "deck": "day2",
+      "id": "next",
+      "n": 38,
+      "session": 4,
+      "title": "Day 3: observe and size",
+      "text": "Next Day 3: observe and size Metrics with percentiles, logs with no personal data, and a trace of one slow request A load test at three rates against Munira's objective: 95th percentile under 150 ms at 200 requests a second Workers, replicas and the cost of 1,000 predictions",
+      "href": "../slides/day2.html#next"
+    },
+    {
+      "deck": "day3",
+      "id": "title",
+      "n": 1,
+      "session": 0,
+      "title": "Observe and size",
+      "text": "SDAIA Academy · Deploying AI Services: Containers, Serving and Monitoring Observe and size Day 3: Metrics, logs and traces that answer questions, then the load the service can carry and what it costs AI Engineering Track4 teaching days + capstone day4 sessions · 4 labsAE-205",
+      "href": "../slides/day3.html#title"
+    },
+    {
+      "deck": "day3",
+      "id": "agenda",
+      "n": 2,
+      "session": 0,
+      "title": "Observe and size",
+      "text": "Today Observe and size Session 1 · Metrics that matter Rate, errors and duration, histograms and their buckets, percentiles, the distribution of predictions and dashboards defined as code Session 2 · Logs and traces Structured logs with a request id, personal fields redacted at the edge, and traces that show where one slow request spent its time Session 3 · Load testing Open and closed load, warm-up, steady rates, percentiles under load and the knee where latency breaks the objective Session 4 · Sizing and cost Workers and replicas, concurrency on a processor, headroom, processor against graphics-processor serving and the cost of 1,000 predictions",
+      "href": "../slides/day3.html#agenda"
+    },
+    {
+      "deck": "day3",
+      "id": "s1",
+      "n": 3,
+      "session": 1,
+      "title": "Metrics that matter",
+      "text": "Session 1 Metrics that matter Instrument a service with request, error and latency metrics Compute the 50th, 95th and 99th percentiles from histogram buckets Define a dashboard as code with latency, errors and predictions 01",
+      "href": "../slides/day3.html#s1"
+    },
+    {
+      "deck": "day3",
+      "id": "three-questions",
+      "n": 4,
+      "session": 1,
+      "title": "Rate, errors and duration describe what every caller felt",
+      "text": "What to measure Rate, errors and duration describe what every caller felt Rate Requests a second, by route. The claims system's traffic, as Farz saw it. Errors The share of requests that failed, by status. A 5xx is Farz's fault; a 4xx is the caller's. Duration How long requests took, as a distribution: percentiles, not an average. A model adds a fourth. What it predicted: the share of each label, by version.",
+      "href": "../slides/day3.html#three-questions"
+    },
+    {
+      "deck": "day3",
+      "id": "metric-types",
+      "n": 5,
+      "session": 1,
+      "title": "Counters only go up; a histogram counts observations into buckets",
+      "text": "Prometheus metric types Counters only go up; a histogram counts observations into buckets Type What it holds Farz uses it for Counter a total that only increases; rate() turns it into a speed rifd_requests_total, rifd_predictions_total Gauge a value that goes up and down rifd_model_ready Histogram a count per bucket boundary, plus a sum and a count rifd_request_duration_seconds Summary percentiles computed in the process nothing: they cannot be added across replicas",
+      "href": "../slides/day3.html#metric-types"
+    },
+    {
+      "deck": "day3",
+      "id": "labels-cardinality",
+      "n": 6,
+      "session": 1,
+      "title": "Every distinct set of label values is a new time series",
+      "text": "Labels Every distinct set of label values is a new time series self.predictions = Counter( \"rifd_predictions\", \"Predictions made, by model version and label\", [\"model\", \"version\", \"label\"]) 2 versions × 3 labels: 6 series Add claim_id: a series per claim, and the monitoring system stores every one A label value is also data that leaves the service: never a member field",
+      "href": "../slides/day3.html#labels-cardinality"
+    },
+    {
+      "deck": "day3",
+      "id": "histogram-quantile",
+      "n": 7,
+      "session": 1,
+      "title": "histogram_quantile finds the bucket and draws a straight line inside it",
+      "text": "Percentiles from buckets histogram_quantile finds the bucket and draws a straight line inside it histogram_quantile(0.95, sum by (le) (rate(rifd_request_duration_seconds_bucket{route=\"/v1/triage\"}[1m]))) Sum, then estimate. Bucket rates add up across replicas; the 95th percentile of the sum is the 95th percentile of the service. Only as precise as the buckets. Farz's boundaries are 0.1, 0.15 and 0.2 around the objective; with only 0.1 and 0.5 the estimate could be anywhere in between.",
+      "href": "../slides/day3.html#histogram-quantile"
+    },
+    {
+      "deck": "day3",
+      "id": "prediction-panel",
+      "n": 8,
+      "session": 1,
+      "title": "The share of each label is the first sign that something changed",
+      "text": "The model's own signal The share of each label is the first sign that something changed 36% fast track in the training claims 47% standard 16% investigate The panel sum by (version, label) (rate(rifd_predictions_total[1m])) shows these shares live, per version. A canary whose shares differ by more than 10 points breaks one of Munira's rollback criteria on Day 4.",
+      "href": "../slides/day3.html#prediction-panel"
+    },
+    {
+      "deck": "day3",
+      "id": "dashboard-as-code",
+      "n": 9,
+      "session": 1,
+      "title": "The dashboard is a file in the repository, reviewed like code",
+      "text": "Dashboards as code The dashboard is a file in the repository, reviewed like code monitoring/dashboard.json: four panels, each a PromQL query Grafana loads it at start from monitoring/grafana/ (provisioning) The lab's check reads the file: a test of the dashboard A change to a metric name breaks a test, not the on-call engineer's night Four panels Requests a second by status; error ratio; p50, p95 and p99 of triage; predictions a second by version and label.",
+      "href": "../slides/day3.html#dashboard-as-code"
+    },
+    {
+      "deck": "day3",
+      "id": "check-metrics",
+      "n": 10,
+      "session": 1,
+      "title": "How do you get the service's 95th percentile?",
+      "text": "Checkpoint How do you get the service's 95th percentile? Farz runs four replicas. Each exposes its latency histogram. The dashboard must show the 95th percentile of all triage requests in the last minute. Which query is right? avg of histogram_quantile(0.95, …) computed for each replica max of histogram_quantile(0.95, …) over the replicas rate of the duration sum divided by the rate of the count histogram_quantile(0.95, sum by (le) (rate(…_bucket[1m])))",
+      "href": "../slides/day3.html#check-metrics"
+    },
+    {
+      "deck": "day3",
+      "id": "lab-3-1",
+      "n": 11,
+      "session": 1,
+      "title": "Rate, errors and latency",
+      "text": "Lab 3.1 · 25 min Rate, errors and latency Expose request rate, error rate and latency histograms and graph the 50th, 95th and 99th percentiles. D3_1_metrics.html Add the counters and the latency histogram 8 min Add the prediction distribution 4 min Drive traffic and compute the percentiles 7 min Read the dashboard file; check 6 min ✱ Stretch: Move the histogram buckets and see how far the estimated 95th percentile moves",
+      "href": "../slides/day3.html#lab-3-1"
+    },
+    {
+      "deck": "day3",
+      "id": "s2",
+      "n": 12,
+      "session": 2,
+      "title": "Logs and traces",
+      "text": "Session 2 Logs and traces Write one structured log line per request with a request id Redact personal fields before they reach a log or a trace, and test it Follow one slow request through its spans to the slow step 02",
+      "href": "../slides/day3.html#s2"
+    },
+    {
+      "deck": "day3",
+      "id": "structured-logs",
+      "n": 13,
+      "session": 2,
+      "title": "One JSON line per event, with the fields you will search on",
+      "text": "Structured logs One JSON line per event, with the fields you will search on {\"claim_id\": \"CLM-050017\", \"line\": \"health\", \"label\": \"investigate\", \"version\": \"1.0.0\", \"event\": \"triage\", \"request_id\": \"bf97fe2e0dc94165\", \"level\": \"info\", \"timestamp\": \"2026-11-15T06:40:42Z\"} {\"method\": \"POST\", \"route\": \"/v1/triage\", \"status\": 200, \"ms\": 28.37, \"event\": \"request\", \"request_id\": \"bf97fe2e0dc94165\", \"level\": \"info\", \"timestamp\": \"2026-11-15T06:40:42Z\"} The request id joins every line of one request, and the claims system's own log Fields, not sentences: a query finds every investigate label of version 1.0.0",
+      "href": "../slides/day3.html#structured-logs"
+    },
+    {
+      "deck": "day3",
+      "id": "what-leaked",
+      "n": 14,
+      "session": 2,
+      "title": "Half the start state's log lines held a national id or a mobile number",
+      "text": "Lab 3.2 · step 1 Half the start state's log lines held a national id or a mobile number 200 / 401 log lines with personal numbers after 200 claims logs.get().info(\"triage\", claim=claim.model_dump(), label=out[\"label\"], version=m.version) What goes wrong. Logging the whole object \"for debugging\" copies the member block into every log store, backup and search index.",
+      "href": "../slides/day3.html#what-leaked"
+    },
+    {
+      "deck": "day3",
+      "id": "redact-at-edge",
+      "n": 15,
+      "session": 2,
+      "title": "Do not log it; then redact what slips through; then test both",
+      "text": "Redaction Do not log it; then redact what slips through; then test both 1 · Do not log it log claim id, line, label, version: never the body → 2 · Redact a logger processor masks national ids, mobiles and member fields → 3 · Test tests/test_redaction.py sends a claim and searches the log The first line is the defence. A pattern cannot know every way personal data is written; not logging the body can.",
+      "href": "../slides/day3.html#redact-at-edge"
+    },
+    {
+      "deck": "day3",
+      "id": "spans",
+      "n": 16,
+      "session": 2,
+      "title": "A trace is one request; each span is one step inside it",
+      "text": "Traces A trace is one request; each span is one step inside it Span Parent POST /v1/triage none: the root fastapi.endpoint the root triage fastapi.endpoint policy_lookup triage predict triage Every span has a trace id, its own id, its parent's id and a duration OpenTelemetry writes them; the lab saves them to a file instead of a collector The same code sends them over OTLP in production",
+      "href": "../slides/day3.html#spans"
+    },
+    {
+      "deck": "day3",
+      "id": "slow-request",
+      "n": 17,
+      "session": 2,
+      "title": "The slowest request spent its time waiting for the policy system",
+      "text": "Lab 3.2 · step 3 The slowest request spent its time waiting for the policy system policy_lookup A 120 ms call to the policy system, made only for health claims outside the network: 7.0% of 401 requests in the course's run. predict About 2 ms. Making the model faster would change nothing the caller feels. 7% is more than 5%. When more than one request in twenty takes the slow path, the 95th percentile falls inside it.",
+      "href": "../slides/day3.html#slow-request"
+    },
+    {
+      "deck": "day3",
+      "id": "check-logs",
+      "n": 18,
+      "session": 2,
+      "title": "Where should the national id stop?",
+      "text": "Checkpoint Where should the national id stop? The fraud-review service logs each request body at debug level, and the log search tool hides the national id field in its display. A colleague says that is enough. What do you answer? It is enough while debug logging stays off in production It is enough, because nobody sees the field It is not: the id is already stored; stop logging the body and test that no id reaches a log Encrypt the log store and keep logging the body",
+      "href": "../slides/day3.html#check-logs"
+    },
+    {
+      "deck": "day3",
+      "id": "lab-3-2",
+      "n": 19,
+      "session": 2,
+      "title": "Logs, redaction and a trace",
+      "text": "Lab 3.2 · 25 min Logs, redaction and a trace Add structured logs with a request id, redact personal fields and follow one slow request through a trace. D3_2_logs_traces.html Find the personal fields in the current logs 4 min Log JSON with a request id; redact at the edge 9 min Add spans; find the slowest request and its slow span 8 min Check 4 min ✱ Stretch: Pass the request id to the policy lookup as a header and see it in the lookup's own log",
+      "href": "../slides/day3.html#lab-3-2"
+    },
+    {
+      "deck": "day3",
+      "id": "s3",
+      "n": 20,
+      "session": 3,
+      "title": "Load testing",
+      "text": "Session 3 Load testing Write a load test that sends realistic requests at a fixed rate Run it at three rates and read percentiles, errors and throughput Locate the rate at which the 95th percentile breaks the objective 03",
+      "href": "../slides/day3.html#s3"
+    },
+    {
+      "deck": "day3",
+      "id": "the-objective",
+      "n": 21,
+      "session": 3,
+      "title": "Munira's objective: 95% of claims answered within 150 ms at 200 a second",
+      "text": "The objective Munira's objective: 95% of claims answered within 150 ms at 200 a second 150 ms 95th percentile, measured by the caller 200 / s the peak after a sandstorm or a flood 1% most errors allowed Written in ../data/objective.json by the owner of the service, before anyone measured anything.",
+      "href": "../slides/day3.html#the-objective"
+    },
+    {
+      "deck": "day3",
+      "id": "open-closed",
+      "n": 22,
+      "session": 3,
+      "title": "Real callers do not wait for each other: test with an open load",
+      "text": "Two kinds of load Real callers do not wait for each other: test with an open load Closed N users, each sends the next request after the last answer. When Farz slows, the test sends less, and the queue a real caller meets never forms. Open Requests leave on a schedule, 200 a second, whatever the answers do. A slowdown shows as a queue and a higher percentile. What goes wrong. A closed test reports good percentiles exactly when the service is overloaded.",
+      "href": "../slides/day3.html#open-closed"
+    },
+    {
+      "deck": "day3",
+      "id": "realistic-requests",
+      "n": 23,
+      "session": 3,
+      "title": "One claim a hundred times a second is not Farz's traffic",
+      "text": "Lab 3.3 · step 2 One claim a hundred times a second is not Farz's traffic loadtest/one_claim.csv ../data/replay/week1.csv Claims one motor claim 3,000 claims: motor, health, property Calls the policy lookup never about 7% of claims What its 95th percentile measures the fast path only the path a claims handler waits on",
+      "href": "../slides/day3.html#realistic-requests"
+    },
+    {
+      "deck": "day3",
+      "id": "warm-up-rates",
+      "n": 24,
+      "session": 3,
+      "title": "Warm up, then hold each rate long enough to count its tail",
+      "text": "Running it Warm up, then hold each rate long enough to count its tail uv run python tools/loadtest.py --rates 80 150 220 --seconds 20 --warmup 3 \\ --file ../data/replay/week1.csv --label \"1 worker\" --out runs/load.json The warm-up is not counted: first connections and caches are not the steady state 20 s at 150 a second is 3,000 requests: 150 of them are in the slowest 5% Choose rates so that one holds the objective and one breaks it",
+      "href": "../slides/day3.html#warm-up-rates"
+    },
+    {
+      "deck": "day3",
+      "id": "the-knee",
+      "n": 25,
+      "session": 3,
+      "title": "Latency stays flat, then rises sharply: that bend is the capacity",
+      "text": "Reading the result Latency stays flat, then rises sharply: that bend is the capacity Below the knee p95 set by the slow path, about 120 to 130 ms → At the knee requests start to queue; p95 climbs past 150 ms → Above it the achieved rate stops following the target Read three columns. The 95th percentile, the error ratio, and whether the achieved rate kept up with the target.",
+      "href": "../slides/day3.html#the-knee"
+    },
+    {
+      "deck": "day3",
+      "id": "check-load",
+      "n": 26,
+      "session": 3,
+      "title": "What did this load test miss?",
+      "text": "Checkpoint What did this load test miss? A team load-tests the fraud-review service with 50 users, each sending the next request when the last answer arrives. The 95th percentile stays at 40 ms while the service's own histogram shows 400 ms in the same minute. What explains it? A closed load: users waited for slow answers, so fewer requests were sent and timed exactly when it slowed The network between the test and the service The test had no warm-up The histogram buckets are too wide",
+      "href": "../slides/day3.html#check-load"
+    },
+    {
+      "deck": "day3",
+      "id": "lab-3-3",
+      "n": 27,
+      "session": 3,
+      "title": "Three rates against the objective",
+      "text": "Lab 3.3 · 25 min Three rates against the objective Run a load test at three request rates and find where latency breaks the objective. D3_3_load_test.html Read the objective and the locust file 4 min Make the requests realistic 5 min Run three rates with a warm-up 10 min Report where the objective breaks; check 6 min ✱ Stretch: Run the same rates with k6 and compare the two tools' numbers",
+      "href": "../slides/day3.html#lab-3-3"
+    },
+    {
+      "deck": "day3",
+      "id": "s4",
+      "n": 28,
+      "session": 4,
+      "title": "Sizing and cost",
+      "text": "Session 4 Sizing and cost Measure the rate one worker carries within the objective Choose workers and replicas for a target rate with headroom Compute the cost per 1,000 predictions of a configuration 04",
+      "href": "../slides/day3.html#s4"
+    },
+    {
+      "deck": "day3",
+      "id": "workers-replicas",
+      "n": 29,
+      "session": 4,
+      "title": "Workers share a container; replicas are containers of their own",
+      "text": "Two ways to add capacity Workers share a container; replicas are containers of their own Workers uvicorn --workers 2: two Python processes in one container. Each holds its own copy of the model; together they use more than one processor. Replicas replicas: 3: three pods, which the cluster can place on different nodes and replace one at a time. One process per processor is the usual start. Python runs one thread of Python code at a time per process, so a CPU-bound service scales with processes.",
+      "href": "../slides/day3.html#workers-replicas"
+    },
+    {
+      "deck": "day3",
+      "id": "headroom",
+      "n": 30,
+      "session": 4,
+      "title": "Run each replica below its measured capacity, and keep one spare",
+      "text": "From capacity to replicas Run each replica below its measured capacity, and keep one spare def replicas_needed(target_rps, capacity_rps, headroom, spare=1): return math.ceil(target_rps / (capacity_rps * (1 - headroom))) + spare Headroom 30%. A replica measured at 160 a second is planned at 112: bursts and a noisy neighbour stay inside the objective. One spare. A rolling update or a lost node takes one replica away without breaking the objective.",
+      "href": "../slides/day3.html#headroom"
+    },
+    {
+      "deck": "day3",
+      "id": "cost-per-1000",
+      "n": 31,
+      "session": 4,
+      "title": "Cost per 1,000 predictions makes two configurations comparable",
+      "text": "The price of a prediction Cost per 1,000 predictions makes two configurations comparable Rifd's price sheet SAR an hour 1 vCPU 0.19 1 GiB of memory 0.025 1 GPU 7.40 Three replicas of one worker (1 vCPU, 0.25 GiB each): 3 × 0.19625 = SAR 0.589 an hour. 200 a second is 720,000 predictions an hour: SAR 0.00082 per 1,000.",
+      "href": "../slides/day3.html#cost-per-1000"
+    },
+    {
+      "deck": "day3",
+      "id": "cpu-or-gpu",
+      "n": 32,
+      "session": 4,
+      "title": "For Farz, a graphics processor would cost over twelve times more and help nothing",
+      "text": "Processor or graphics processor? For Farz, a graphics processor would cost over twelve times more and help nothing SAR 0.0103 per 1,000 predictions on one GPU replica alone, at 200 a second The model takes about a millisecond; the slow path is a 120 ms wait for another system A logistic regression on ten features has little to run in parallel Graphics processors pay off for large neural networks and batches",
+      "href": "../slides/day3.html#cpu-or-gpu"
+    },
+    {
+      "deck": "day3",
+      "id": "check-sizing",
+      "n": 33,
+      "session": 4,
+      "title": "How many replicas?",
+      "text": "Checkpoint How many replicas? One replica of the fraud-review service holds its objective up to 60 requests a second. The target is 150 a second. The team plans 20% headroom and one spare replica. How many replicas does it need? 4 5 6 3",
+      "href": "../slides/day3.html#check-sizing"
+    },
+    {
+      "deck": "day3",
+      "id": "lab-3-4",
+      "n": 34,
+      "session": 4,
+      "title": "Workers, replicas and cost",
+      "text": "Lab 3.4 · 25 min Workers, replicas and cost Tune workers and replicas to meet the latency objective and compute cost per 1,000 predictions. D3_4_sizing_cost.html Measure one, two and four workers at the target rate 10 min Choose workers and replicas with headroom 6 min Compute cost per 1,000 predictions 5 min Check 4 min ✱ Stretch: Price the same load on the cheapest configuration that breaks the objective and say what Munira would lose",
+      "href": "../slides/day3.html#lab-3-4"
+    },
+    {
+      "deck": "day3",
+      "id": "wrap-up",
+      "n": 35,
+      "session": 4,
+      "title": "Three things to keep from today",
+      "text": "Day 3 · wrap-up Three things to keep from today Measure what callers feel Rate, errors, a latency histogram with buckets near the objective, and the label shares. Never write what you must protect Log fields, not bodies; redact as a last defence; test it. Traces find the slow step. Size from a realistic open load Find the knee, plan below it with headroom and a spare, and price it per 1,000.",
+      "href": "../slides/day3.html#wrap-up"
+    },
+    {
+      "deck": "day3",
+      "id": "next",
+      "n": 36,
+      "session": 4,
+      "title": "Day 4: release and watch",
+      "text": "Next Day 4: release and watch A 10% canary of Farz 1.1.0, compared like with like A faulty 1.2.0, rolled back within five minutes on written criteria Drift in four weeks of claims, two alert rules and a runbook",
+      "href": "../slides/day3.html#next"
+    },
+    {
+      "deck": "day4",
+      "id": "title",
+      "n": 1,
+      "session": 0,
+      "title": "Release and watch",
+      "text": "SDAIA Academy · Deploying AI Services: Containers, Serving and Monitoring Release and watch Day 4: Release a new version on evidence, roll back a bad one, watch the inputs drift and hand over to the on-call engineer AI Engineering Track4 teaching days + capstone day4 sessions · 4 labsAE-205",
+      "href": "../slides/day4.html#title"
+    },
+    {
+      "deck": "day4",
+      "id": "agenda",
+      "n": 2,
+      "session": 0,
+      "title": "Release and watch",
+      "text": "Today Release and watch Session 1 · Rolling, canary and shadow releases Blue-green, rolling, canary and shadow releases, and comparing a canary with the current version on the same metrics Session 2 · Rollback on evidence Rollback criteria written before the release, who decides, rolling back first and diagnosing second Session 3 · Drift in replayed traffic Data drift and concept drift, distribution tests and population stability, delayed labels and when drift should start a retraining Session 4 · Alerts and a runbook Alerts on symptoms the caller feels, durations that stop flapping, a runbook the on-call engineer can follow and the person who decides a rollback",
+      "href": "../slides/day4.html#agenda"
+    },
+    {
+      "deck": "day4",
+      "id": "s1",
+      "n": 3,
+      "session": 1,
+      "title": "Rolling, canary and shadow releases",
+      "text": "Session 1 Rolling, canary and shadow releases Choose a release strategy for a change and its risk Send a fixed share of traffic to a new version Compare two versions on errors, latency and predictions 01",
+      "href": "../slides/day4.html#s1"
+    },
+    {
+      "deck": "day4",
+      "id": "strategies",
+      "n": 4,
+      "session": 1,
+      "title": "Four ways to put a new version in front of callers",
+      "text": "Release strategies Four ways to put a new version in front of callers Strategy What callers get Answers the question Rolling pods replaced one at a time; all traffic moves in minutes does it start and stay ready? Blue-green a full second copy; one switch moves everything, one switch back can we undo in seconds? Canary a small share, say 10%, then more if it holds is it better, or at least no worse, on real traffic? Shadow none: a copy of each request goes to it and its answer is thrown away how would it behave, with no caller at risk?",
+      "href": "../slides/day4.html#strategies"
+    },
+    {
+      "deck": "day4",
+      "id": "choose-by-risk",
+      "n": 5,
+      "session": 1,
+      "title": "Choose the strategy from what could go wrong, and for whom",
+      "text": "Choosing Choose the strategy from what could go wrong, and for whom A fix to logging No change in predictions: a rolling update, watched by the probes. Farz 1.1.0, a new algorithm Predictions change a little: a 10% canary with written criteria. A new decision rule Who gets investigated changes: shadow first, then a canary. A new contract version Callers must change too: a new path, /v2/, beside the old one.",
+      "href": "../slides/day4.html#choose-by-risk"
+    },
+    {
+      "deck": "day4",
+      "id": "router",
+      "n": 6,
+      "session": 1,
+      "title": "A hash of the claim id decides which version answers",
+      "text": "Lab 4.1 · the router A hash of the claim id decides which version answers def to_canary(claim_id: str) -> bool: bucket = int(hashlib.sha256(claim_id.encode()).hexdigest()[:8], 16) % 10000 return bucket < STATE[\"weight\"] * 10000 The same claim always reaches the same version: a retry never gets a second opinion POST /admin/weight changes the share at once and records when and why On a cluster: two Deployments behind one Service in the ratio you want, or a weighted route of a gateway or service mesh",
+      "href": "../slides/day4.html#router"
+    },
+    {
+      "deck": "day4",
+      "id": "like-with-like",
+      "n": 7,
+      "session": 1,
+      "title": "Compare the two versions on the same hour of the same traffic",
+      "text": "Comparing Compare the two versions on the same hour of the same traffic Errors : the share of 5xx answers of each version Latency : the 95th percentile of each, measured by the caller Label shares : fast track, standard, investigate Agreement with the delayed labels that have arrived What goes wrong. Comparing the canary with last week's dashboard: the traffic of a Thursday after a storm is not the traffic of a quiet Sunday.",
+      "href": "../slides/day4.html#like-with-like"
+    },
+    {
+      "deck": "day4",
+      "id": "check-strategy",
+      "n": 8,
+      "session": 1,
+      "title": "Which release strategy?",
+      "text": "Checkpoint Which release strategy? The fraud team has a new model that changes which claims are referred to investigators. The head of the team will not let any claim be referred by it until she has seen a week of its decisions on real claims. What do you propose? A 10% canary for a week A rolling update with readiness probes A shadow release for a week: copy each request to it and keep only the current model's answer Blue-green with a switch back if anything looks wrong",
+      "href": "../slides/day4.html#check-strategy"
+    },
+    {
+      "deck": "day4",
+      "id": "lab-4-1",
+      "n": 9,
+      "session": 1,
+      "title": "A 10% canary",
+      "text": "Lab 4.1 · 25 min A 10% canary Send 10% of traffic to a new version and compare its metrics with the current one. D4_1_canary.html Start both versions and the router 5 min Replay claims with 10% to the canary 7 min Compare errors, latency and predictions 8 min Write the release log entry; check 5 min ✱ Stretch: Run 1.1.0 in shadow instead: copy every request to it, return only 1.0.0's answer, and compare",
+      "href": "../slides/day4.html#lab-4-1"
+    },
+    {
+      "deck": "day4",
+      "id": "s2",
+      "n": 10,
+      "session": 2,
+      "title": "Rollback on evidence",
+      "text": "Session 2 Rollback on evidence Apply written rollback criteria to a canary's metrics Roll back within a time limit and record the evidence Name the person accountable for the decision 02",
+      "href": "../slides/day4.html#s2"
+    },
+    {
+      "deck": "day4",
+      "id": "written-criteria",
+      "n": 11,
+      "session": 2,
+      "title": "Write the criteria before the release, while nobody is attached to it",
+      "text": "Rollback criteria Write the criteria before the release, while nobody is attached to it Judge only after 200 canary requests. Roll back when any one holds: Errors (500 or 503) above 1% 95th percentile above 150 ms Any label share more than 10 points from the current version's Munira Al-Ajmi Wrote them, decides, and is accountable. The on-call engineer executes, and rolls back first when one fires.",
+      "href": "../slides/day4.html#written-criteria"
+    },
+    {
+      "deck": "day4",
+      "id": "who-decides",
+      "n": 12,
+      "session": 2,
+      "title": "One named person decides; the criteria let anyone act at once",
+      "text": "Accountability One named person decides; the criteria let anyone act at once 1 · A criterion fires the watch prints which one → 2 · Roll back the on-call engineer sets the share to 0 → 3 · Tell Munira, with the evidence files → 4 · Diagnose after traffic is safe Roll back first, diagnose second. Every minute spent finding the cause is a minute of claims triaged by a faulty version.",
+      "href": "../slides/day4.html#who-decides"
+    },
+    {
+      "deck": "day4",
+      "id": "faulty-release",
+      "n": 13,
+      "session": 2,
+      "title": "Farz 1.2.0 answers fast, without errors, and sends too many claims to investigate",
+      "text": "Lab 4.2 Farz 1.2.0 answers fast, without errors, and sends too many claims to investigate 18% investigate share of 1.1.0 38% investigate share of the 1.2.0 canary 40 s from the release to share 0 What goes wrong. A dashboard of errors and latency stays green the whole time.",
+      "href": "../slides/day4.html#faulty-release"
+    },
+    {
+      "deck": "day4",
+      "id": "find-the-cause",
+      "n": 14,
+      "session": 2,
+      "title": "The model file is fine; the decision rule beside it is not",
+      "text": "Diagnose second The model file is fine; the decision rule beside it is not \"decision\": {\"investigate_threshold\": 0.3} \"decision\": {\"investigate_threshold\": 0.05} Day 1 put the decision rule into the artefact so that it travels with the model. That also means a release can change behaviour without changing a single weight.",
+      "href": "../slides/day4.html#find-the-cause"
+    },
+    {
+      "deck": "day4",
+      "id": "evidence",
+      "n": 15,
+      "session": 2,
+      "title": "A release log entry is the evidence an auditor will ask for",
+      "text": "The record A release log entry is the evidence an auditor will ask for Row Comes from Canary requests judged, error ratio, p95, label shares runs/compare.json Seconds from the release to share 0, and the reason runs/router_events.jsonl Every answer after the rollback came from 1.1.0 runs/after_rollback.jsonl Cause, decided by, accountable the metadata diff, and the runbook",
+      "href": "../slides/day4.html#evidence"
+    },
+    {
+      "deck": "day4",
+      "id": "check-rollback",
+      "n": 16,
+      "session": 2,
+      "title": "What does the on-call engineer do now?",
+      "text": "Checkpoint What does the on-call engineer do now? At 02:10 a canary has served 350 requests. Errors and latency are normal, but its investigate share is 14 points above the current version's. Munira's criteria say more than 10 points means roll back. Munira is asleep. What should the engineer do? Set the canary's share to 0 now, then tell Munira with the evidence Wait for Munira to decide in the morning Keep the canary, since errors and latency are normal Find the cause first, then decide",
+      "href": "../slides/day4.html#check-rollback"
+    },
+    {
+      "deck": "day4",
+      "id": "lab-4-2",
+      "n": 17,
+      "session": 2,
+      "title": "Roll back a faulty version",
+      "text": "Lab 4.2 · 25 min Roll back a faulty version Trigger the rollback criteria with a seeded faulty version and roll back within five minutes. D4_2_rollback.html Read the criteria; start the canary of 1.2.0 5 min Watch until a criterion fires 6 min Roll back and time it 5 min Find the cause; write the release log 6 min Check 3 min ✱ Stretch: Do the same rollback on the cluster with kubectl rollout undo and compare the time",
+      "href": "../slides/day4.html#lab-4-2"
+    },
+    {
+      "deck": "day4",
+      "id": "s3",
+      "n": 18,
+      "session": 3,
+      "title": "Drift in replayed traffic",
+      "text": "Session 3 Drift in replayed traffic Compute a drift statistic per feature against the training data Name the shifted features and rule out a noisy one Say what delayed labels allow you to conclude, and when 03",
+      "href": "../slides/day4.html#s3"
+    },
+    {
+      "deck": "day4",
+      "id": "two-drifts",
+      "n": 19,
+      "session": 3,
+      "title": "The inputs can change, or what they mean can change",
+      "text": "Drift The inputs can change, or what they mean can change Data drift The distribution of the inputs moves: more claims through the app, larger motor amounts. Visible the day it happens. Concept drift The link between inputs and the right label moves: the same claim should now be triaged differently. Visible only when the labels arrive. Rifd's labels arrive about two weeks after a claim. In week 4, weeks 1 and 2 are labelled; weeks 3 and 4 are not.",
+      "href": "../slides/day4.html#two-drifts"
+    },
+    {
+      "deck": "day4",
+      "id": "psi",
+      "n": 20,
+      "session": 3,
+      "title": "PSI adds up how much each bin's share moved, weighted by how far",
+      "text": "Population stability index PSI adds up how much each bin's share moved, weighted by how far def psi_from_shares(expected, actual): e = np.clip(expected, EPS, None) a = np.clip(actual, EPS, None) return float(np.sum((a - e) * np.log(a / e))) < 0.1 stable 0.1 – 0.25 watch ≥ 0.25 shifted",
+      "href": "../slides/day4.html#psi"
+    },
+    {
+      "deck": "day4",
+      "id": "ks-decoy",
+      "n": 21,
+      "session": 3,
+      "title": "A p-value says a move is not chance; PSI says whether it matters",
+      "text": "Significant is not large A p-value says a move is not chance; PSI says whether it matters Week 3 KS p-value PSI Verdict policy tenure 0.041 0.013 moved about a month: negligible channel (category) 0.277 shifted amount, all lines 9e-32 0.075 stable when pooled With 3,000 claims a week, a tiny move can be significant. Report it, then say it does not matter.",
+      "href": "../slides/day4.html#ks-decoy"
+    },
+    {
+      "deck": "day4",
+      "id": "by-segment",
+      "n": 22,
+      "session": 3,
+      "title": "Pooled over all lines the amount looks stable; motor amounts shifted",
+      "text": "Lab 4.3 · by line of business Pooled over all lines the amount looks stable; motor amounts shifted 0.064 amount PSI, all lines, week 4 0.290 motor claims only 0.010 · 0.035 health · property Compute drift where the model behaves differently. A shift in a minority segment disappears in the pooled number.",
+      "href": "../slides/day4.html#by-segment"
+    },
+    {
+      "deck": "day4",
+      "id": "what-labels-say",
+      "n": 23,
+      "session": 3,
+      "title": "The predictions moved at once; whether they are wrong waits for labels",
+      "text": "What Rifd can conclude The predictions moved at once; whether they are wrong waits for labels Week Investigate share of Farz 1.0.0 Agreement with delayed labels 1 20% 73.0% 2 19% 74.6% 3 26% not yet known 4 26% not yet known The retraining trigger. Drift in the inputs starts a closer watch; agreement with the labels falling below an agreed level starts a retraining.",
+      "href": "../slides/day4.html#what-labels-say"
+    },
+    {
+      "deck": "day4",
+      "id": "check-drift",
+      "n": 24,
+      "session": 3,
+      "title": "What should the drift report say?",
+      "text": "Checkpoint What should the drift report say? In week 3, the region mix has a PSI of 0.02. Customer age has a KS p-value of 0.001 and a PSI of 0.03. The channel has a PSI of 0.31. Labels for week 3 arrive in two weeks. Which summary is right? Age and channel shifted; the model is degrading Channel shifted, so accuracy has fallen and the model must be retrained now Nothing shifted: two of three features are stable Channel shifted; age moved slightly and does not matter; accuracy is unknown until the labels arrive",
+      "href": "../slides/day4.html#check-drift"
+    },
+    {
+      "deck": "day4",
+      "id": "lab-4-3",
+      "n": 25,
+      "session": 3,
+      "title": "Drift in four weeks",
+      "text": "Lab 4.3 · 25 min Drift in four weeks Replay four weeks of claims, compute a drift statistic per feature and name the shifted ones. D4_3_drift.html Replay the four weeks through the service 5 min Compute population stability and a KS test per feature 9 min Name the shifted features; check the labels you have 7 min Write the drift report; check 4 min ✱ Stretch: Recompute the statistics with Evidently and compare its verdicts with yours",
+      "href": "../slides/day4.html#lab-4-3"
+    },
+    {
+      "deck": "day4",
+      "id": "s4",
+      "n": 26,
+      "session": 4,
+      "title": "Alerts and a runbook",
+      "text": "Session 4 Alerts and a runbook Write an alert rule on error ratio and one on latency Test both rules against a recorded error spike Write a one-page runbook with the accountable person 04",
+      "href": "../slides/day4.html#s4"
+    },
+    {
+      "deck": "day4",
+      "id": "symptom-alerts",
+      "n": 27,
+      "session": 4,
+      "title": "Alert on what callers feel, not on everything that can be measured",
+      "text": "Alerts Alert on what callers feel, not on everything that can be measured Page someone errors above 1% for two minutes 95th percentile above 150 ms for five minutes Put on a dashboard CPU of one pod one slow request a label share moving slowly: a weekly drift report What goes wrong. An alert that fires and resolves by itself every few hours trains the on-call engineer to ignore it.",
+      "href": "../slides/day4.html#symptom-alerts"
+    },
+    {
+      "deck": "day4",
+      "id": "alert-rule",
+      "n": 28,
+      "session": 4,
+      "title": "An expression, a duration, a severity and a runbook link",
+      "text": "A rule An expression, a duration, a severity and a runbook link - alert: FarzLatencyP95High expr: histogram_quantile(0.95, sum by (le) (rate(rifd_request_duration_seconds_bucket{route=\"/v1/triage\"}[5m]))) > 0.15 for: 5m labels: {severity: page} annotations: summary: The 95th-percentile triage latency is above the 150 ms objective runbook_url: RUNBOOK.md#latency",
+      "href": "../slides/day4.html#alert-rule"
+    },
+    {
+      "deck": "day4",
+      "id": "test-on-recording",
+      "n": 29,
+      "session": 4,
+      "title": "Test alerts on a recording, before they wake anyone",
+      "text": "Lab 4.4 · testing the rules Test alerts on a recording, before they wake anyone Rules Blip at minute 6 Errors, minutes 12 to 18 Latency from minute 22 Reference: errors 1m, for 2m; latency 5m, for 5m quiet fires 14.0 to 18.8 fires from 28.0 Same, no for: quiet fires from 12.0 fires from 23.0 Latency over 1m, no for: fires 6.0 to 7.8 unchanged rule: 14.0 to 18.8 fires from 22.0",
+      "href": "../slides/day4.html#test-on-recording"
+    },
+    {
+      "deck": "day4",
+      "id": "runbook",
+      "n": 30,
+      "session": 4,
+      "title": "One page the on-call engineer can follow in the middle of the night",
+      "text": "The runbook One page the on-call engineer can follow in the middle of the night Accountable for a rollback decision: Munira Al-Ajmi For each alert: what the caller sees, the first three checks When to roll back, and the exact command Who to tell: Munira, the platform channel, Bassam if personal data may have leaked Linked from the alert runbook_url: RUNBOOK.md#errors: the page opens from the notification.",
+      "href": "../slides/day4.html#runbook"
+    },
+    {
+      "deck": "day4",
+      "id": "choose-capstone",
+      "n": 31,
+      "session": 4,
+      "title": "Choose the model you will take to a monitored service",
+      "text": "Tomorrow Choose the model you will take to a monitored service Farz The course's model, with every artefact you built this week. Shabih The similar-claims model, with its own memory, start-up and release questions. Your own A model from your work, with synthetic or public data only. Write the choice, the reason and the objective you will defend in CAPSTONE.md.",
+      "href": "../slides/day4.html#choose-capstone"
+    },
+    {
+      "deck": "day4",
+      "id": "check-alerts",
+      "n": 32,
+      "session": 4,
+      "title": "Why does this alert flap?",
+      "text": "Checkpoint Why does this alert flap? An alert on the 95th-percentile latency uses a 30-second rate window and no for: duration. It fires for a minute about twice a day and resolves by itself. Callers never complain. What is the best first change? Raise the threshold to 300 ms Lengthen the window and add a for: duration, then test on a recording Send it to a wider group Delete the alert",
+      "href": "../slides/day4.html#check-alerts"
+    },
+    {
+      "deck": "day4",
+      "id": "lab-4-4",
+      "n": 33,
+      "session": 4,
+      "title": "Two alerts and a runbook",
+      "text": "Lab 4.4 · 25 min Two alerts and a runbook Write two alert rules and a one-page runbook for the on-call engineer, then choose the capstone model. D4_4_alerts_runbook.html Write the two rules without AI help 8 min Test them on the recorded spike 6 min Write the one-page runbook 8 min Choose the capstone model; check 3 min ✱ Stretch: Add a burn-rate alert on the error objective over two windows and test it on the same recording",
+      "href": "../slides/day4.html#lab-4-4"
+    },
+    {
+      "deck": "day4",
+      "id": "wrap-up",
+      "n": 34,
+      "session": 4,
+      "title": "Three things to keep from the course",
+      "text": "Day 4 · wrap-up Three things to keep from the course Release on evidence A canary against written criteria, compared like with like, and a log entry with its files. Roll back first A named person is accountable; the criteria let the person on call act at once. Watch inputs, wait for labels Drift by segment, significant is not large, and alerts tested before they page.",
+      "href": "../slides/day4.html#wrap-up"
+    },
+    {
+      "deck": "day4",
+      "id": "next",
+      "n": 35,
+      "session": 4,
+      "title": "Day 5: the capstone",
+      "text": "Next Day 5: the capstone Bring your CAPSTONE.md and a public GitHub repository with the service, its container file and manifests Dashboard and alerts as code, a load test against your objective, a recorded canary and rollback, a drift check Eight minutes to defend, four minutes of questions, one injected fault",
+      "href": "../slides/day4.html#next"
+    },
+    {
+      "deck": "capstone",
+      "id": "title",
+      "n": 1,
+      "session": 0,
+      "title": "Capstone: a monitored service and its defence",
+      "text": "SDAIA Academy · Deploying AI Services: Containers, Serving and Monitoring Capstone: a monitored service and its defence Capstone: Eight minutes to show the service, four minutes of questions, and one fault injected by the assessor AI Engineering Track4 teaching days + capstone day8 min talk and demo · 4 min Q&AAE-205",
+      "href": "../slides/capstone.html#title"
+    },
+    {
+      "deck": "capstone",
+      "id": "agenda",
+      "n": 2,
+      "session": 0,
+      "title": "How the presentations run",
+      "text": "Capstone How the presentations run Expectations and final prep the rubric, a last rehearsal, then the first presentations Presentations each one timed, with questions after it Review and closing peer feedback, the trainer's review, what next",
+      "href": "../slides/capstone.html#agenda"
+    },
+    {
+      "deck": "capstone",
+      "id": "rubric",
+      "n": 3,
+      "session": 0,
+      "title": "The rubric",
+      "text": "How presentations are scored The rubric Packaging and API 20% Container and deployment 20% Observability 20% Sizing against the objective 15% Release, rollback and drift 25% Show results from at least two measured runs. A claim without a number is a plan, not a result.",
+      "href": "../slides/capstone.html#rubric"
+    },
+    {
+      "deck": "capstone",
+      "id": "format",
+      "n": 4,
+      "session": 0,
+      "title": "8 minutes to present, 4 to answer",
+      "text": "Format 8 minutes to present, 4 to answer 1 · The problem Who, what, why now. One slide. 2 · What you built Design, decisions, trade-offs. Then the live demo. 3 · What you measured Baseline, improvement, failures found, what comes next. Peer feedback. After each talk, everyone writes one strength, one question and one suggestion.",
+      "href": "../slides/capstone.html#format"
+    },
+    {
+      "deck": "capstone",
+      "id": "what-to-submit",
+      "n": 5,
+      "session": 0,
+      "title": "One public repository, and the command behind every number",
+      "text": "The submission One public repository, and the command behind every number The service, its artefact and its contract tests A container file and the deployment manifests The dashboard and two alert rules, as files A README: load test against your objective, canary and rollback, drift check No real personal data. A public repository holds synthetic or public data only, and no key of any kind.",
+      "href": "../slides/capstone.html#what-to-submit"
+    },
+    {
+      "deck": "capstone",
+      "id": "injected-fault",
+      "n": 6,
+      "session": 0,
+      "title": "The assessor breaks one thing; you show how you would know and what you do",
+      "text": "During the defence The assessor breaks one thing; you show how you would know and what you do For example A model folder removed, a decision threshold changed, a slow dependency, a wrong image tag. You show Which check, metric, alert or trace tells you, in your own running service. You act Roll back, fix or explain, and say who you would tell.",
+      "href": "../slides/capstone.html#injected-fault"
+    },
+    {
+      "deck": "capstone",
+      "id": "running-order",
+      "n": 7,
+      "session": 0,
+      "title": "Who presents when",
+      "text": "Running order Who presents when # Presenter Project 1 2 3 4 5 6 7 8",
+      "href": "../slides/capstone.html#running-order"
+    },
+    {
+      "deck": "capstone",
+      "id": "final-prep",
+      "n": 8,
+      "session": 0,
+      "title": "Final prep · 20 minutes",
+      "text": "Before the first presentation Final prep · 20 minutes Rehearse once, record a backup, try the demo on this screen.",
+      "href": "../slides/capstone.html#final-prep"
+    },
+    {
+      "deck": "capstone",
+      "id": "now-presenting",
+      "n": 9,
+      "session": 0,
+      "title": "Talk and demo",
+      "text": "Now presenting Talk and demo Questions",
+      "href": "../slides/capstone.html#now-presenting"
+    },
+    {
+      "deck": "capstone",
+      "id": "review",
+      "n": 10,
+      "session": 0,
+      "title": "What the presentations showed",
+      "text": "Trainer review What the presentations showed Strongest patterns What several projects got right. Common gaps What most projects would fix next. One surprise Something nobody expected.",
+      "href": "../slides/capstone.html#review"
+    },
+    {
+      "deck": "capstone",
+      "id": "what-next",
+      "n": 11,
+      "session": 0,
+      "title": "Keep going",
+      "text": "After the course Keep going Your project stays yours: keep it reproducible and add the next improvement you named today Follow-up task: run your capstone service on one week of replayed traffic and write a short incident note on what you saw Next Academy courses: AE-305, for retraining pipelines and online evaluation, and AE-307, for autoscaling and accelerators",
+      "href": "../slides/capstone.html#what-next"
+    },
+    {
+      "deck": "capstone",
+      "id": "thanks",
+      "n": 12,
+      "session": 0,
+      "title": "Thank you",
+      "text": "SDAIA Academy Thank you Deploying AI Services: Containers, Serving and Monitoring",
+      "href": "../slides/capstone.html#thanks"
+    }
+  ]
+}

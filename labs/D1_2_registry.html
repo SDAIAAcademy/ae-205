@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-ax="lab" data-track="ai-engineering">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 1.2 · Register two versions · Deploying AI Services: Containers, Serving and Monitoring</title>
+<meta name="generator" content="SDAIA Academy engine 1.0.0">
+<link rel="icon" href="../_engine/icon.svg">
+<link rel="alternate" type="text/markdown" href="D1_2_registry.md">
+<link rel="describedby" href="../llms.txt">
+<link rel="stylesheet" href="../_engine/academy.css">
+</head>
+<body>
+<header>
+<div class="wrap">
+<div class="top"><div class="logo"></div><nav><a href="../index.html">Course page</a><a href="../slides/day1.html#lab-1-2">Back to the slides</a></nav></div>
+<span class="tag">Lab 1.2</span>
+<h1>Register two versions</h1>
+<p>Register two supplied model versions with metrics and tags and load one by version.</p>
+<div class="meta"><span>25 minutes</span><span>Day 1</span><span>Session 2: A registry for model versions</span></div>
+</div>
+</header>
+<main class="wrap">
+<article class="lab" data-lab="1.2">
+  <div class="box goal">
+    <h3>Goal</h3>
+    <p>Put two supplied versions of Farz in a registry with their metrics, the hash of the data they were trained on and who trained them; see the registry refuse to overwrite a version; and load a model by version and by alias.</p>
+  </div>
+
+  <h2>What you need</h2>
+  <ul>
+    <li>The lab folder <code>rifd-labs/1.2</code>: the artefacts <code>models/farz-1.0.0</code> (Adel's logistic regression) and <code>models/farz-1.1.0</code> (gradient boosting)</li>
+    <li>The course's registry, <code>rifd.registry</code>: a folder with an index file, so that you can read everything it does. MLflow and a git repository of tagged artefacts are the same ideas.</li>
+    <li>AI policy: tutor.</li>
+  </ul>
+
+  <div class="step">
+    <h3>Read the two supplied artefacts and their metrics <span class="min">4 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">cd rifd-labs/1.2
+uv run python -c "import json; [print(v, json.load(open(f'models/farz-{v}/metadata.json'))['metrics']) for v in ('1.0.0','1.1.0')]"</code></pre>
+    <p>Which version is better, by how much, and on which measure? Write it down: the registry will carry it.</p>
+  </div>
+
+  <div class="step">
+    <h3>Register 1.0.0 and 1.1.0 with tags and a data hash <span class="min">8 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">DATA=$(sha256sum ../data/claims.csv | cut -d' ' -f1)
+uv run python -m rifd.registry register --name farz --version 1.0.0 --from models/farz-1.0.0 \
+  --tag data_sha256=$DATA --tag trained_by="Adel Al-Shaikh"</code></pre>
+    <p>Register 1.1.0 the same way. The registry copies the artefact into <code>registry/store/</code> and records its sha256: from now on the registry, not a folder on someone's laptop, is where the model lives. In PowerShell, take the hash from <code>(Get-FileHash ../data/claims.csv).Hash.ToLower()</code>.</p>
+  </div>
+
+  <div class="step">
+    <h3>Try to overwrite 1.0.0 and read the refusal <span class="min">3 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run python -m rifd.registry register --name farz --version 1.0.0 --from models/farz-1.1.0</code></pre>
+    <p>A version is a promise that a name means one thing forever. A release log, a canary comparison and an incident note all point at "farz 1.0.0"; if it could change, none of them could be checked.</p>
+  </div>
+
+  <div class="step">
+    <h3>Set the champion alias; load by version and by alias <span class="min">7 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run python -m rifd.registry alias --name farz --alias champion --version 1.0.0
+uv run python -m rifd.registry alias --name farz --alias challenger --version 1.1.0
+uv run python -m rifd.registry load --name farz --ref 1.1.0
+uv run python -m rifd.registry load --name farz --ref champion
+uv run python -m rifd.registry show --name farz</code></pre>
+    <p>A service that loads <code>champion</code> changes model when someone moves the alias; one that loads <code>1.0.0</code> never does. Decide which of the two the production deployment should name, and why.</p>
+  </div>
+
+  <div class="step">
+    <h3>Check <span class="min">3 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run ../lab.py check 1.2</code></pre>
+  </div>
+
+  <div class="step stretch">
+    <h3>✱ Stretch</h3>
+    <p>Write the same two registrations as MLflow calls (a registered model, two versions, tags, the alias <code>champion</code>), or as annotated git tags on a repository that holds the artefact folders. What does each give you that the folder registry does not?</p>
+  </div>
+
+  <h2>Check yourself</h2>
+  <ol class="checks">
+    <li>A colleague retrains 1.0.0 with one more month of claims. What version does it get, and what tag shows the difference?</li>
+    <li>Why is the data hash a tag of the version and not a line in a wiki?</li>
+    <li>When should a deployment name an alias rather than a version?</li>
+  </ol>
+
+  <details class="instructor">
+    <summary>For the trainer</summary>
+    <p>Expected: two versions with metrics (1.0.0 macro F1 0.728, 1.1.0 0.735 on the 10,000 held-out claims in the course's run), tags <code>data_sha256</code> and <code>trained_by</code>, aliases champion and challenger, and the refusal "farz 1.0.0 is already registered and versions never change". The difference between the versions is small: say so; Day 4 decides on live evidence, not on this table.</p>
+    <p>On the alias question: production names a version, so that what runs is in the manifest and a rollback is a change of one line; a staging or batch job may follow an alias. Common errors: hashing the wrong file; forgetting the quotes around a tag with a space. Solution: <code>labs/solutions/S1_2.py</code>.</p>
+  </details>
+</article>
+<nav class="pager"><a href="D1_1_export_artefact.html" rel="prev">← Previous lab</a><a href="D1_3_prediction_api.html" rel="next">Next lab →</a></nav>
+</main>
+<footer><div class="wrap">SDAIA Academy · AI Engineering Track · Deploying AI Services: Containers, Serving and Monitoring<br><span class="muted">Course version 2027.1.0 · engine 1.0.0 · built 2026-11-15 · commit fec8449</span></div></footer>
+<script type="application/json" id="academy-data">{"v":1,"engine":"1.0.0","build":{"at":"2026-11-15T09:27:24Z","version":"2027.1.0","commit":"fec8449"},"course":{"id":"ae-205","code":"AE-205","title":"Deploying AI Services: Containers, Serving and Monitoring","track":"ai-engineering","lang":"en","dir":"ltr","url":"https://sdaiaacademy.github.io/ae-205/","repo":"SDAIAAcademy/ae-205","home":"../index.html"},"lab":{"id":"1.2","title":"Register two versions","summary":"Register two supplied model versions with metrics and tags and load one by version.","minutes":25,"day":1,"unit":"Day 1","session":2,"deck":"../slides/day1.html#lab-1-2","prev":"D1_1_export_artefact.html","next":"D1_3_prediction_api.html","alt":{}},"ai":{"context":{"course":"../context/course.md","courseJs":"../context/course.js","day":null,"llms":"../llms.txt"},"tasks":[],"tools":[]},"features":{},"strings":{}}</script>
+<script src="../_engine/academy.js"></script>
+</body>
+</html>

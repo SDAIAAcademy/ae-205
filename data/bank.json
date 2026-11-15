@@ -1,0 +1,1603 @@
+{
+  "format": "academy-bank",
+  "version": 1,
+  "course": {
+    "id": "ae-205",
+    "code": "AE-205",
+    "title": "Deploying AI Services: Containers, Serving and Monitoring",
+    "lang": "en",
+    "version": "2027.1.0"
+  },
+  "questions": [
+    {
+      "id": "check-artefact-q1",
+      "type": "single",
+      "prompt": "A colleague exports a churn model as model.skops, signature.json and requirements.txt with exact pins. A clean environment loads it and reproduces 7 of 10 reference predictions. The notebook ranked customers and called the top 5% at risk. What is missing?",
+      "options": [
+        "A safer format than skops",
+        "Looser pins, so that the newest versions install",
+        "The decision rule: the top-5% cut-off that turned scores into labels",
+        "Twenty reference predictions instead of ten"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "The model file holds the scores; the notebook's rule that turns them into labels is part of the model and belongs in the artefact.",
+      "misconceptions": [
+        "Blames the format: skops loads the same fitted pipeline the notebook had",
+        "The pins are exact and the environment loaded them: versions are not the difference",
+        "",
+        "More reference claims would show the same gap more precisely, not close it"
+      ],
+      "lo": [
+        "LO2"
+      ],
+      "day": 1,
+      "session": 1,
+      "slide": "check-artefact",
+      "pool": "checkpoint",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "check-registry-q1",
+      "type": "single",
+      "prompt": "Adel retrains Farz 1.0.0 with the same code on one more month of claims. Production names farz 1.0.0 in its manifest. What should be registered?",
+      "options": [
+        "A new version, 1.0.1 or 1.1.0, with the new data hash, while production keeps 1.0.0",
+        "The new file as 1.0.0, so production picks it up",
+        "Nothing: the code did not change",
+        "Move the champion alias to the new file"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "New data makes a new model; a new model is a new version with its own evidence, released on purpose.",
+      "misconceptions": [
+        "",
+        "Treats a version as a slot to refresh: production would change model with no release",
+        "Thinks lineage is only about code: the data changed, so the model did",
+        "An alias move with no new version leaves no record of what the new file is"
+      ],
+      "lo": [
+        "LO2"
+      ],
+      "day": 1,
+      "session": 2,
+      "slide": "check-registry",
+      "pool": "checkpoint",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "check-contract-q1",
+      "type": "single",
+      "prompt": "The claims system starts sending \"fraud_flag\": true with some claims. Farz's contract does not list the field. What should the service do?",
+      "options": [
+        "Ignore the field and triage the claim",
+        "Pass it to the model as an eleventh feature",
+        "Answer 500, prediction-failed",
+        "Answer 422, validation-error, naming fraud_flag"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "The caller thinks the field matters; a validation error naming it starts the conversation about whether it should.",
+      "misconceptions": [
+        "Silently dropping it lets the caller believe the flag changed the triage",
+        "The model has no input for it: passing it on changes nothing and hides the gap",
+        "A 500 says the service broke, and the caller will retry the same claim",
+        ""
+      ],
+      "lo": [
+        "LO3"
+      ],
+      "day": 1,
+      "session": 3,
+      "slide": "check-contract",
+      "pool": "checkpoint",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "check-health-q1",
+      "type": "single",
+      "prompt": "A new Farz pod starts, but its model file was copied incompletely. The process is running and answers HTTP. What should /livez and /readyz answer?",
+      "options": [
+        "/livez 503, /readyz 503",
+        "/livez 200, /readyz 503 with the reason",
+        "/livez 200, /readyz 200, then 503 on each prediction",
+        "/livez 503, /readyz 200"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The process is fine and the model is not: stop the traffic, keep the process, and say why.",
+      "misconceptions": [
+        "A liveness failure restarts the pod, and a restart cannot fix a bad file: a restart loop",
+        "",
+        "Ready with a bad model sends every claim to a service that cannot triage it",
+        "Readiness is the check that guards traffic; liveness failing alone would restart a pod that could not serve anyway"
+      ],
+      "lo": [
+        "LO3"
+      ],
+      "day": 1,
+      "session": 4,
+      "slide": "check-health",
+      "pool": "checkpoint",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "check-layers-q1",
+      "type": "single",
+      "prompt": "A container file copies pyproject.toml and uv.lock, runs uv sync --no-install-project, copies src, and runs uv sync again. A colleague edits one function in src/rifd/app.py and rebuilds. What runs again?",
+      "options": [
+        "Every line, from the base image down",
+        "The copy of src and the second uv sync, which installs only the project",
+        "The first uv sync, because the dependencies must be checked",
+        "Nothing, because the dependencies did not change"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A layer is reused while its line and the files it copies are unchanged; the first line whose input changed, and everything after it, runs again.",
+      "misconceptions": [
+        "Assumes any change invalidates the whole cache; the cache is per line, in order",
+        "",
+        "Thinks the lock is re-read on every build; it was not changed, so its layer is reused",
+        "Forgets that the copied code is part of the layer's key: a changed file invalidates it"
+      ],
+      "lo": [
+        "LO4"
+      ],
+      "day": 2,
+      "session": 1,
+      "slide": "check-layers",
+      "pool": "checkpoint",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "check-scan-q1",
+      "type": "single",
+      "prompt": "A scan of the fraud-review image reports: high, in the HTTP parser, fixed in the next version; critical, in an image library the service never imports, no fix; medium, in the base image, fixed by a newer base. Where do you start?",
+      "options": [
+        "The critical one, because it is critical",
+        "The medium one, because a new base is the easiest change",
+        "Suppress all three and scan again next quarter",
+        "The high one in the HTTP parser: it is reachable by every request and has a fix"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Start with what an attacker can reach and you can fix; record the unfixable one with its reason, and take the new base next.",
+      "misconceptions": [
+        "Severity alone ignores that there is no fix and the code is never reached",
+        "The newer base is a fix in reach, but a reachable high finding matters more than a medium one",
+        "Suppressing hides findings without changing what runs",
+        ""
+      ],
+      "lo": [
+        "LO4"
+      ],
+      "day": 2,
+      "session": 2,
+      "slide": "check-scan",
+      "pool": "checkpoint",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "check-cluster-q1",
+      "type": "single",
+      "prompt": "A Farz pod shows Running with 0/1 ready. Its events repeat \"Readiness probe failed: HTTP probe failed with statuscode: 503\". The pod has never restarted. What is the most likely cause?",
+      "options": [
+        "The model did not load, so /readyz answers model-unavailable",
+        "The image tag cannot be pulled",
+        "The memory limit is too low",
+        "The liveness probe path is wrong"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Running and never restarted rules out the image, memory and liveness; a 503 from the readiness check is the service saying it has no model.",
+      "misconceptions": [
+        "",
+        "An image problem stops the container before it runs; this pod is Running",
+        "A memory kill restarts the container; this pod has never restarted",
+        "A failing liveness probe restarts the container; the restart count is zero"
+      ],
+      "lo": [
+        "LO4"
+      ],
+      "day": 2,
+      "session": 3,
+      "slide": "check-cluster",
+      "pool": "checkpoint",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "check-shabih-q1",
+      "type": "single",
+      "prompt": "Shabih needs about 40 MiB more memory than Farz and loads ten times slower. Searches peak in the afternoon, when adjusters work; new claims arrive all day. The team wants to put both models in one pod to save a deployment. What do you advise?",
+      "options": [
+        "One pod with both models: fewer things to run",
+        "Two images, because the models differ",
+        "One image, two deployments, each with its own limits, startup probe and replica count",
+        "Run Shabih as a nightly batch instead of a service"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Separate deployments let each model have the memory, start-up budget, scaling and release it needs, while one image keeps the build single.",
+      "misconceptions": [
+        "Saving one manifest ties two release cycles and two scaling patterns together",
+        "The difference is in limits, probes and scaling, which the image does not decide",
+        "",
+        "An afternoon peak calls for scaling Shabih, not for running it at all hours only from a batch"
+      ],
+      "lo": [
+        "LO3"
+      ],
+      "day": 2,
+      "session": 4,
+      "slide": "check-shabih",
+      "pool": "checkpoint",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "check-metrics-q1",
+      "type": "single",
+      "prompt": "Farz runs four replicas. Each exposes its latency histogram. The dashboard must show the 95th percentile of all triage requests in the last minute. Which query is right?",
+      "options": [
+        "avg of histogram_quantile(0.95, …) computed for each replica",
+        "max of histogram_quantile(0.95, …) over the replicas",
+        "rate of the duration sum divided by the rate of the count",
+        "histogram_quantile(0.95, sum by (le) (rate(…_bucket[1m])))"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Bucket counts add up across replicas, so sum the rates by boundary first and estimate the percentile once.",
+      "misconceptions": [
+        "Averaging four percentiles is not the percentile of the whole: a slow replica's tail is diluted",
+        "The largest of four percentiles overstates the service's percentile",
+        "The average of the observations hides the tail the objective is about",
+        ""
+      ],
+      "lo": [
+        "LO5"
+      ],
+      "day": 3,
+      "session": 1,
+      "slide": "check-metrics",
+      "pool": "checkpoint",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "check-logs-q1",
+      "type": "single",
+      "prompt": "The fraud-review service logs each request body at debug level, and the log search tool hides the national id field in its display. A colleague says that is enough. What do you answer?",
+      "options": [
+        "It is enough while debug logging stays off in production",
+        "It is enough, because nobody sees the field",
+        "It is not: the id is already stored; stop logging the body and test that no id reaches a log",
+        "Encrypt the log store and keep logging the body"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Data that is never written cannot leak or be misused; a display filter acts after the copy exists.",
+      "misconceptions": [
+        "Debug logs get switched on in an incident, exactly when many people read them",
+        "Hiding a field in the display leaves it stored, backed up and searchable",
+        "",
+        "Encrypting the store still keeps a copy that serves no purpose"
+      ],
+      "lo": [
+        "LO5"
+      ],
+      "day": 3,
+      "session": 2,
+      "slide": "check-logs",
+      "pool": "checkpoint",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "check-load-q1",
+      "type": "single",
+      "prompt": "A team load-tests the fraud-review service with 50 users, each sending the next request when the last answer arrives. The 95th percentile stays at 40 ms while the service's own histogram shows 400 ms in the same minute. What explains it?",
+      "options": [
+        "A closed load: users waited for slow answers, so fewer requests were sent and timed exactly when it slowed",
+        "The network between the test and the service",
+        "The test had no warm-up",
+        "The histogram buckets are too wide"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "In a closed test the callers slow down with the service, so the slow period contributes few requests and the percentile looks good.",
+      "misconceptions": [
+        "",
+        "The histogram measures inside the service; network time would make the caller's numbers larger, not smaller",
+        "A warm-up affects the first seconds, not a whole minute",
+        "Buckets make the estimate coarse, not ten times wrong in the other direction"
+      ],
+      "lo": [
+        "LO6"
+      ],
+      "day": 3,
+      "session": 3,
+      "slide": "check-load",
+      "pool": "checkpoint",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "check-sizing-q1",
+      "type": "single",
+      "prompt": "One replica of the fraud-review service holds its objective up to 60 requests a second. The target is 150 a second. The team plans 20% headroom and one spare replica. How many replicas does it need?",
+      "options": [
+        "4",
+        "5",
+        "6",
+        "3"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Each replica is planned at 60 × 0.8 = 48 a second, so 150 / 48 = 3.1, rounded up to 4, plus one spare: 5.",
+      "misconceptions": [
+        "Forgets the headroom or the spare: either one alone gives 4",
+        "",
+        "Counts the headroom as an extra replica on top of the spare",
+        "Forgets both: 150 / 60 rounds up to 3, each replica at over 80% of capacity and nothing spare"
+      ],
+      "lo": [
+        "LO6"
+      ],
+      "day": 3,
+      "session": 4,
+      "slide": "check-sizing",
+      "pool": "checkpoint",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "check-strategy-q1",
+      "type": "single",
+      "prompt": "The fraud team has a new model that changes which claims are referred to investigators. The head of the team will not let any claim be referred by it until she has seen a week of its decisions on real claims. What do you propose?",
+      "options": [
+        "A 10% canary for a week",
+        "A rolling update with readiness probes",
+        "A shadow release for a week: copy each request to it and keep only the current model's answer",
+        "Blue-green with a switch back if anything looks wrong"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Only shadow traffic shows the new model's decisions on real claims while no claim is decided by it.",
+      "misconceptions": [
+        "Even 10% of claims would be referred by the new model",
+        "A rolling update moves every claim to the new model within minutes",
+        "",
+        "Blue-green switches all traffic at once; the undo is fast but claims were referred"
+      ],
+      "lo": [
+        "LO7"
+      ],
+      "day": 4,
+      "session": 1,
+      "slide": "check-strategy",
+      "pool": "checkpoint",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "check-rollback-q1",
+      "type": "single",
+      "prompt": "At 02:10 a canary has served 350 requests. Errors and latency are normal, but its investigate share is 14 points above the current version's. Munira's criteria say more than 10 points means roll back. Munira is asleep. What should the engineer do?",
+      "options": [
+        "Set the canary's share to 0 now, then tell Munira with the evidence",
+        "Wait for Munira to decide in the morning",
+        "Keep the canary, since errors and latency are normal",
+        "Find the cause first, then decide"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The criteria were written so that the person on call can act at once; the accountable person is told, with the evidence.",
+      "misconceptions": [
+        "",
+        "Waiting leaves claims triaged by a version that already broke a written criterion",
+        "The criterion is about the labels; healthy errors and latency do not cancel it",
+        "Diagnosing first keeps the faulty version serving while the cause is found"
+      ],
+      "lo": [
+        "LO7"
+      ],
+      "day": 4,
+      "session": 2,
+      "slide": "check-rollback",
+      "pool": "checkpoint",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "check-drift-q1",
+      "type": "single",
+      "prompt": "In week 3, the region mix has a PSI of 0.02. Customer age has a KS p-value of 0.001 and a PSI of 0.03. The channel has a PSI of 0.31. Labels for week 3 arrive in two weeks. Which summary is right?",
+      "options": [
+        "Age and channel shifted; the model is degrading",
+        "Channel shifted, so accuracy has fallen and the model must be retrained now",
+        "Nothing shifted: two of three features are stable",
+        "Channel shifted; age moved slightly and does not matter; accuracy is unknown until the labels arrive"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Name the large shift, set aside the significant but tiny move, and say what the missing labels leave open.",
+      "misconceptions": [
+        "A significant p-value with a tiny PSI is a small move, not a shift",
+        "Input drift says nothing yet about accuracy; that needs the labels",
+        "One feature far above the threshold is a shift, whatever the others do",
+        ""
+      ],
+      "lo": [
+        "LO7"
+      ],
+      "day": 4,
+      "session": 3,
+      "slide": "check-drift",
+      "pool": "checkpoint",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "check-alerts-q1",
+      "type": "single",
+      "prompt": "An alert on the 95th-percentile latency uses a 30-second rate window and no for: duration. It fires for a minute about twice a day and resolves by itself. Callers never complain. What is the best first change?",
+      "options": [
+        "Raise the threshold to 300 ms",
+        "Lengthen the window and add a for: duration, then test on a recording",
+        "Send it to a wider group",
+        "Delete the alert"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A short window and no duration react to blips; a longer window and a duration fire only on sustained breaches, which the recording can prove.",
+      "misconceptions": [
+        "The objective is the threshold; moving it hides real breaches",
+        "",
+        "An alert nobody acts on is worse than none, whoever receives it",
+        "Deleting it leaves sustained breaches unseen"
+      ],
+      "lo": [
+        "LO5"
+      ],
+      "day": 4,
+      "session": 4,
+      "slide": "check-alerts",
+      "pool": "checkpoint",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-path-registry",
+      "type": "single",
+      "prompt": "An auditor asks which model scored a disputed claim last March and whether it can be loaded today. Which component of the deployment path answers both questions?",
+      "options": [
+        "The container image, because it holds the model file",
+        "The monitor, because it recorded every request",
+        "The model registry, through the version named in the response",
+        "The endpoint, because its path is /v1/"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Each response names the model version, and the registry turns a version into its file, data hash and evidence.",
+      "misconceptions": [
+        "Images are rebuilt and retagged; the image says what ran only if it names a registered version",
+        "Metrics count requests; they do not store which artefact answered or how to load it",
+        "",
+        "The path carries the contract version, which stays the same across many model versions"
+      ],
+      "lo": [
+        "LO1"
+      ],
+      "day": 1,
+      "session": 1,
+      "level": "understand",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-path-runtime",
+      "type": "single",
+      "prompt": "In the path artefact, registry, image, runtime, endpoint, monitor: which component restarts the service when its process stops answering?",
+      "options": [
+        "The runtime, the cluster acting on the liveness probe",
+        "The registry",
+        "The image",
+        "The monitor"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The cluster runs the image and acts on the probes: a failed liveness probe restarts the container.",
+      "misconceptions": [
+        "",
+        "The registry stores versions; it runs nothing",
+        "An image is a static package; it does nothing by itself",
+        "The monitor observes and alerts; it does not restart pods"
+      ],
+      "lo": [
+        "LO1"
+      ],
+      "day": 2,
+      "session": 3,
+      "level": "understand",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-path-monitor",
+      "type": "single",
+      "prompt": "Farz answers every request with status 200 and a fast latency, but its share of investigate labels has doubled since a release. Which component of the path should have shown this first?",
+      "options": [
+        "The image scan",
+        "The endpoint, through its contract tests",
+        "The registry, through the version metrics",
+        "The monitor, through the prediction distribution panel"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Errors and latency can look healthy while predictions shift; only a metric of the predictions themselves shows it.",
+      "misconceptions": [
+        "A vulnerability scan says nothing about what the model predicts",
+        "Contract tests check shapes and types, not whether the labels make sense",
+        "Registered metrics describe the held-out set at registration, not live traffic",
+        ""
+      ],
+      "lo": [
+        "LO1"
+      ],
+      "day": 3,
+      "session": 1,
+      "level": "understand",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-path-image",
+      "type": "single",
+      "prompt": "A colleague says the registry and the container image do the same job, since both store the model. What does the image add that the registry does not?",
+      "options": [
+        "The model version history",
+        "The code, the libraries and the runtime settings that serve the model, in one package the cluster can run",
+        "The training data",
+        "The latency objective"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "The registry answers which model; the image answers what runs it, so the cluster can start the same thing everywhere.",
+      "misconceptions": [
+        "The history lives in the registry; an image holds one build",
+        "",
+        "Neither the image nor the registry should ship the training data; the registry records its hash",
+        "The objective is written by the owner of the service, not stored in either"
+      ],
+      "lo": [
+        "LO1"
+      ],
+      "day": 2,
+      "session": 1,
+      "level": "understand",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-path-order",
+      "type": "single",
+      "prompt": "A new Farz version is trained. In which order does it pass through the path before a claim is triaged by it?",
+      "options": [
+        "Image, registry, artefact, endpoint",
+        "Registry, artefact, monitor, image",
+        "Artefact, registry, image, runtime and endpoint, then the monitor watches it",
+        "Endpoint, artefact, image, registry"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Each box consumes the one before it, and the monitor watches the result in service.",
+      "misconceptions": [
+        "The artefact comes first: the image is built from a registered artefact",
+        "The monitor watches a running service; it is not a step before release",
+        "",
+        "The endpoint serves what the runtime runs; it is not where a model starts"
+      ],
+      "lo": [
+        "LO1"
+      ],
+      "day": 4,
+      "session": 4,
+      "level": "understand",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-artefact-pins",
+      "type": "single",
+      "prompt": "An artefact folder holds model.skops, signature.json and metadata.json. A fresh environment installs the newest scikit-learn and the reference predictions differ. What should the export have added?",
+      "options": [
+        "A requirements file with the exact versions that wrote the model",
+        "A pickle copy of the model as a fallback",
+        "A larger set of reference predictions",
+        "The project lock file of the training repository"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "The pins say which library versions load and reproduce the model; the clean-environment test proves them.",
+      "misconceptions": [
+        "",
+        "A second format does not fix which library version loads it",
+        "More references show the difference more clearly but do not prevent it",
+        "The project lock describes the whole project and every platform, not the minimum that loads this file; it works, but the artefact should state its own pins"
+      ],
+      "lo": [
+        "LO2"
+      ],
+      "day": 1,
+      "session": 1,
+      "level": "apply",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-artefact-pickle",
+      "type": "single",
+      "prompt": "A partner sends a model as a pickle file by email. You need it in Rifd's registry. What is the safe first step?",
+      "options": [
+        "Load it in the service and convert it there",
+        "Rename it to .skops",
+        "Register the pickle as it is; the registry checks the sha256",
+        "Ask the partner to export it in a format that loads no code, or load it once in an isolated environment after reading what it imports"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "A pickle is a program; it is loaded only from a trusted source, once, and saved again in a format that runs no code.",
+      "misconceptions": [
+        "Loading a pickle runs whatever it names, inside the service that holds personal data",
+        "The format is in the bytes, not in the name",
+        "A hash proves the file did not change, not that it is safe to load",
+        ""
+      ],
+      "lo": [
+        "LO2"
+      ],
+      "day": 1,
+      "session": 1,
+      "level": "apply",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-registry-immutable",
+      "type": "single",
+      "prompt": "Production runs farz 1.0.0. A colleague finds a bug in the export (the decision rule was missing) and wants to fix the files of 1.0.0 in the registry. What should happen?",
+      "options": [
+        "Overwrite 1.0.0, since the model weights did not change",
+        "Register the fixed export as a new version and release it",
+        "Move the champion alias to the fixed folder",
+        "Edit metadata.json in place, since only metadata changes"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A version is a promise that a name means one thing forever; a fix is a new version.",
+      "misconceptions": [
+        "The behaviour changed, so anything that cited 1.0.0 would now mean something else",
+        "",
+        "An alias pointing at an unregistered folder leaves no record of what the file is",
+        "The sha256 and every release record would silently stop matching"
+      ],
+      "lo": [
+        "LO2"
+      ],
+      "day": 1,
+      "session": 2,
+      "level": "apply",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-reference-predictions",
+      "type": "single",
+      "prompt": "Why does the Farz artefact store ten reference inputs with the predictions the notebook made for them?",
+      "options": [
+        "To give the API documentation examples",
+        "To warm up the model for speed only",
+        "To prove, in any environment, that the artefact behaves as the notebook did",
+        "To measure the model's accuracy"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Matching all ten in a clean environment is the evidence that the export, pins and decision rule are complete.",
+      "misconceptions": [
+        "Examples help, but the check against expected labels is the purpose",
+        "The warm-up uses one of them, but the point is the comparison with the expected labels",
+        "",
+        "Ten claims say nothing about accuracy; they detect a change in behaviour"
+      ],
+      "lo": [
+        "LO2"
+      ],
+      "day": 1,
+      "session": 1,
+      "level": "apply",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-api-422-503",
+      "type": "single",
+      "prompt": "The claims system receives a 422 validation-error for one claim and a 503 model-unavailable for another. What should it do?",
+      "options": [
+        "Fix and resend the first; retry the second later or route it to manual triage",
+        "Retry both after a delay",
+        "Send both to manual triage",
+        "Treat both as service failures and alert"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Typed errors tell the caller what to do: a validation error is fixed by the caller, an unavailable model is retried.",
+      "misconceptions": [
+        "",
+        "Retrying the 422 sends the same invalid claim again",
+        "The 422 points at a field to fix; manual triage hides the data problem",
+        "A 422 is the caller's error, not an outage"
+      ],
+      "lo": [
+        "LO3"
+      ],
+      "day": 1,
+      "session": 3,
+      "level": "apply",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-api-unknown-field",
+      "type": "single",
+      "prompt": "The contract lists no field called channel_detail, and a caller starts sending it. The schema uses extra=\"forbid\". What does the caller receive?",
+      "options": [
+        "200, with the field ignored",
+        "500 prediction-failed",
+        "400 with a plain text message",
+        "422 validation-error naming channel_detail"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Unknown fields are refused with a validation error that names them, so the caller learns the field has no effect.",
+      "misconceptions": [
+        "That is extra=\"ignore\"; forbid refuses it",
+        "Validation happens before the model, so nothing fails inside the service",
+        "Every error of the contract is a problem detail with a type",
+        ""
+      ],
+      "lo": [
+        "LO3"
+      ],
+      "day": 1,
+      "session": 3,
+      "level": "apply",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-readyz-dependency",
+      "type": "single",
+      "prompt": "The policy lookup that some health claims need is down. Should Farz's /livez, /readyz, or neither, report it?",
+      "options": [
+        "/livez, so that the pod restarts",
+        "Neither: answer the affected claims with dependency-failed and alert on its rate",
+        "/readyz, so that every pod leaves the service",
+        "Both, to be safe"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Readiness is about this pod being able to serve; a shared dependency is handled per request and by an alert.",
+      "misconceptions": [
+        "A restart cannot fix another system, and every pod would restart at once",
+        "",
+        "All pods share the dependency; removing them all stops triage for motor and property claims too",
+        "Both failing turns one missing dependency into a full outage and a restart loop"
+      ],
+      "lo": [
+        "LO3"
+      ],
+      "day": 1,
+      "session": 4,
+      "level": "apply",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-similar-endpoint",
+      "type": "single",
+      "prompt": "Shabih returns past claims similar to a description. Which response field would break the contract Bassam signed?",
+      "options": [
+        "claim_id of each neighbour",
+        "the incident type of each neighbour",
+        "the member name of each neighbour",
+        "the similarity score"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "The index keeps claim id, line and incident only; personal fields never enter the index or the answer.",
+      "misconceptions": [
+        "An internal identifier, needed to open the claim",
+        "A category, no personal data",
+        "",
+        "A number about the texts, no personal data"
+      ],
+      "lo": [
+        "LO3"
+      ],
+      "day": 2,
+      "session": 4,
+      "level": "apply",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-docker-layer-order",
+      "type": "single",
+      "prompt": "A container file copies the whole project, then runs uv sync. Every code change reinstalls all dependencies. What fixes it?",
+      "options": [
+        "Copy pyproject.toml and uv.lock first, sync, then copy the code",
+        "Use a larger base image with the libraries already in it",
+        "Disable the build cache",
+        "Install with pip instead of uv"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "A layer is rebuilt when anything copied before it changes; copying the lock before the code keeps the dependency layer cached.",
+      "misconceptions": [
+        "",
+        "A larger base adds size and moves the problem to the base image's updates",
+        "That makes every build slower, not faster",
+        "The tool is not the problem; the layer order is"
+      ],
+      "lo": [
+        "LO4"
+      ],
+      "day": 2,
+      "session": 1,
+      "level": "apply",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-docker-multistage",
+      "type": "single",
+      "prompt": "What does the second stage of Farz's multi-stage container file leave out that the naive file kept?",
+      "options": [
+        "The model files",
+        "The non-root user",
+        "The Python interpreter",
+        "The build tools, the development dependencies and the files the service does not read"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "The runtime stage copies only the virtual environment, the code and the models from the build stage.",
+      "misconceptions": [
+        "The runtime stage copies models/: the service needs them",
+        "The runtime stage adds the user; the naive file had none",
+        "Both stages are Python images; the runtime needs the interpreter",
+        ""
+      ],
+      "lo": [
+        "LO4"
+      ],
+      "day": 2,
+      "session": 1,
+      "level": "understand",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-scan-fix",
+      "type": "single",
+      "prompt": "A scan reports a critical finding in h11 0.14.0 with fixed version 0.16.0, and a medium finding in the base image with no fix available. What do you do first?",
+      "options": [
+        "Change the base image to a different distribution",
+        "Raise the h11 pin to a fixed version, rebuild and scan again",
+        "Ignore both, since the service is internal",
+        "Suppress the critical finding in the scanner configuration"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Fix the most severe finding that has a fix, then rescan to prove it is gone.",
+      "misconceptions": [
+        "The medium finding has no fix yet; the critical one has a fix in reach",
+        "",
+        "An internal service still receives requests a proxy forwards; the advisory is about that path",
+        "Suppression hides the finding without changing what runs"
+      ],
+      "lo": [
+        "LO4"
+      ],
+      "day": 2,
+      "session": 2,
+      "level": "apply",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-secret-in-image",
+      "type": "single",
+      "prompt": "A container file sets ENV RIFD_LOOKUP_KEY=... in the image. After removing the line, the team rebuilds and pushes. Is the key still exposed?",
+      "options": [
+        "No, the line is gone",
+        "Only if the registry is public",
+        "Yes, in every earlier image that was pushed; the key must also be rotated",
+        "Only in the build cache of the laptop"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "A secret that reached an image is treated as leaked: remove it, rotate it, and supply the new one at run time.",
+      "misconceptions": [
+        "The new image is clean, but the old image and its layers still hold the key",
+        "Anyone who can pull the old image from any registry can read it",
+        "",
+        "The key is in the pushed image's configuration and history"
+      ],
+      "lo": [
+        "LO4"
+      ],
+      "day": 2,
+      "session": 2,
+      "level": "apply",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-k8s-pull-policy",
+      "type": "single",
+      "prompt": "On a kind cluster, pods of rifd/claims:latest stay in ErrImagePull although the image was loaded into the cluster. What is the likely cause?",
+      "options": [
+        "imagePullPolicy Always with the tag latest makes the node pull from a registry that does not have the image",
+        "The readiness probe path is wrong",
+        "The memory limit is too low",
+        "The Service selector does not match"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "With latest the default policy is to pull every time; pin a tag and use IfNotPresent so the loaded image is used.",
+      "misconceptions": [
+        "",
+        "Probes run after the container starts; a pull error is earlier",
+        "A memory limit shows as an out-of-memory kill after start, not as a pull error",
+        "A selector mismatch leaves the Service empty; the pods still start"
+      ],
+      "lo": [
+        "LO4"
+      ],
+      "day": 2,
+      "session": 3,
+      "level": "apply",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-k8s-limits",
+      "type": "single",
+      "prompt": "A pod requests 256Mi of memory with a limit of 512Mi, and grows to 600Mi under load. What happens?",
+      "options": [
+        "Nothing, the request is only a hint",
+        "It is throttled until memory falls",
+        "The scheduler moves it to a bigger node",
+        "The container is killed for exceeding its memory limit and restarted"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Memory above the limit gets the container killed; CPU above its limit is throttled.",
+      "misconceptions": [
+        "The request is used for scheduling; the limit is enforced",
+        "Throttling applies to CPU; memory over the limit is not slowed down",
+        "The scheduler places pods by requests at start; it does not move running pods",
+        ""
+      ],
+      "lo": [
+        "LO4"
+      ],
+      "day": 2,
+      "session": 3,
+      "level": "understand",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-placement",
+      "type": "single",
+      "prompt": "Rifd classifies claims with personal and health data as Restricted and keeps Restricted data on in-Kingdom hosting. Where may the dashboards of request counts, latency and label shares run?",
+      "options": [
+        "Only beside Farz, because they describe Farz",
+        "On the monitoring service outside the Kingdom, provided the metrics and logs sent there carry no personal data and Rifd's owners approve it",
+        "Nowhere: dashboards are not allowed for Restricted services",
+        "Anywhere, since metrics are never personal data"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Placement follows the classification of what is stored and sent; aggregate metrics without personal fields can be classified lower, by a decision someone signs.",
+      "misconceptions": [
+        "What decides placement is the data, not the service it describes",
+        "",
+        "Monitoring is needed; the question is what it carries",
+        "A label value or a log line can carry a national id; that is why redaction is tested"
+      ],
+      "lo": [
+        "LO4"
+      ],
+      "day": 2,
+      "session": 3,
+      "level": "apply",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-histogram-quantile",
+      "type": "single",
+      "prompt": "Farz has four replicas. Why does it record latency as a histogram rather than computing the 95th percentile in each process?",
+      "options": [
+        "Histograms are smaller to store",
+        "A histogram gives the exact 95th percentile",
+        "Bucket counts can be added across replicas, and the 95th percentile of the sum estimated; percentiles of each process cannot be averaged",
+        "Prometheus cannot store numbers below one"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Percentiles do not aggregate; bucket counts do, which is why the histogram is the type for a service with replicas.",
+      "misconceptions": [
+        "Size is not the reason; summaries can be small too",
+        "It gives an estimate, interpolated inside the bucket",
+        "",
+        "Prometheus stores any floating-point number"
+      ],
+      "lo": [
+        "LO5"
+      ],
+      "day": 3,
+      "session": 1,
+      "level": "apply",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-buckets",
+      "type": "single",
+      "prompt": "Farz's latency objective is 150 ms. Its histogram buckets are 0.1, 0.5 and 1 second. What is the problem?",
+      "options": [
+        "No bucket boundary lies near 150 ms, so the estimated 95th percentile there is a straight-line guess between 100 and 500 ms",
+        "There are too few buckets to store",
+        "Buckets must be powers of two",
+        "Histograms need a bucket at zero"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Put boundaries close to the objective so that the estimate is precise where the decision is made.",
+      "misconceptions": [
+        "",
+        "Fewer buckets are cheaper; the issue is where they are",
+        "Any increasing boundaries work",
+        "The first bucket counts everything up to its boundary, from zero"
+      ],
+      "lo": [
+        "LO5"
+      ],
+      "day": 3,
+      "session": 1,
+      "level": "apply",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-redaction-edge",
+      "type": "single",
+      "prompt": "Where should Farz remove the member's national id so that no log line or span carries it?",
+      "options": [
+        "In the dashboard query, by hiding the field",
+        "In the log storage, with a retention rule",
+        "In the claims system, by not sending it",
+        "At the service edge: never pass it to the model, never log the claim body, and redact in the logger as a last defence"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Redact where the data enters, and test that nothing personal reaches the logs or traces.",
+      "misconceptions": [
+        "The data has already left the service and been stored",
+        "The id is stored until the rule runs, and copied wherever logs go",
+        "The contract accepts it, and other uses need it; Farz must still protect what it receives",
+        ""
+      ],
+      "lo": [
+        "LO5"
+      ],
+      "day": 3,
+      "session": 2,
+      "level": "apply",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-trace-slow",
+      "type": "single",
+      "prompt": "A slow triage request shows a root span of 180 ms with two children: policy_lookup 121 ms and predict 1 ms. What should the team look at first?",
+      "options": [
+        "The model: switch to a faster algorithm",
+        "The policy lookup: cache it, call it less, or set a budget",
+        "The network between the caller and Farz",
+        "The logging configuration"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A trace shows where one request spent its time; here the external lookup dominates.",
+      "misconceptions": [
+        "The prediction took one millisecond",
+        "",
+        "The root span is measured in the service, after the request arrived",
+        "Logging is not a span here, and nothing points to it"
+      ],
+      "lo": [
+        "LO5"
+      ],
+      "day": 3,
+      "session": 2,
+      "level": "analyze",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-alert-for",
+      "type": "single",
+      "prompt": "An alert on the 95th-percentile latency fires for one minute every few hours and resolves by itself. The on-call engineer has stopped looking at it. What is the first change?",
+      "options": [
+        "Delete the alert",
+        "Raise the threshold to twice the objective",
+        "Add a for: duration and a longer rate window so that only a sustained breach fires",
+        "Send it to more people"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "An alert should fire on what the caller feels for long enough to matter; a duration stops it flapping on short blips.",
+      "misconceptions": [
+        "The sustained rises it should catch would go unseen",
+        "The alert then misses real breaches of the objective",
+        "",
+        "More people ignoring it does not make it useful"
+      ],
+      "lo": [
+        "LO5"
+      ],
+      "day": 4,
+      "session": 4,
+      "level": "apply",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-dashboard-code",
+      "type": "single",
+      "prompt": "Why does Rifd keep its Farz dashboard as a JSON file in the repository rather than building it by hand in the tool?",
+      "options": [
+        "It is reviewed, versioned and recreated with the service, and its queries can be tested against the metrics the service exposes",
+        "The dashboard loads faster",
+        "Dashboards built by hand cannot show percentiles",
+        "The tool requires it"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Dashboards as code change with the code they describe, through review, and can be checked automatically.",
+      "misconceptions": [
+        "",
+        "Speed is the same",
+        "They can; the problem is that nobody can review or restore them",
+        "Most tools allow both"
+      ],
+      "lo": [
+        "LO5"
+      ],
+      "day": 3,
+      "session": 1,
+      "level": "understand",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-open-load",
+      "type": "single",
+      "prompt": "A load test sends a new request only after the previous answer arrives. As the service slows down, what happens to the measured latency?",
+      "options": [
+        "It rises faithfully with the slowdown",
+        "It cannot be measured",
+        "It is identical to an open load",
+        "It looks better than real traffic would see, because the test sends fewer requests when the service is slow"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Real callers do not wait for each other; an open load at a fixed rate shows the queue.",
+      "misconceptions": [
+        "A closed load sends less when the service slows, so it hides the queue a real caller would meet",
+        "It can; it is just biased",
+        "Open and closed loads differ exactly when the service slows",
+        ""
+      ],
+      "lo": [
+        "LO6"
+      ],
+      "day": 3,
+      "session": 3,
+      "level": "understand",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-one-claim-load",
+      "type": "single",
+      "prompt": "A load test sends the same motor claim 100 times a second and reports a 95th percentile of 9 ms. Live traffic shows 130 ms. What did the test miss?",
+      "options": [
+        "The warm-up",
+        "The mix of claims: health claims outside the network call the slow policy lookup",
+        "The network",
+        "A bigger machine"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "A load test must send the traffic the service will see; the slow path decides the 95th percentile.",
+      "misconceptions": [
+        "Warm-up affects the first seconds, not a steady 95th percentile",
+        "",
+        "The difference is the size of a dependency call, and it shows in the traces",
+        "The laptop was the same"
+      ],
+      "lo": [
+        "LO6"
+      ],
+      "day": 3,
+      "session": 3,
+      "level": "analyze",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-sizing-headroom",
+      "type": "single",
+      "prompt": "One replica keeps the 95th percentile within the objective up to 150 requests a second. The target is 200, Rifd plans 30% headroom and one spare replica. How many replicas?",
+      "options": [
+        "2",
+        "4",
+        "3",
+        "1"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "ceil(200 / (150 x 0.7)) = 2, plus one spare: 3.",
+      "misconceptions": [
+        "Two replicas would each run at 100, above 70% of 150; and there is no spare",
+        "That adds a second spare the plan does not ask for",
+        "",
+        "One replica breaks the objective at the target rate"
+      ],
+      "lo": [
+        "LO6"
+      ],
+      "day": 3,
+      "session": 4,
+      "level": "apply",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-cost-per-1000",
+      "type": "single",
+      "prompt": "Three replicas cost SAR 0.6075 an hour and carry 200 predictions a second. What is the cost of 1,000 predictions?",
+      "options": [
+        "About SAR 0.00084",
+        "About SAR 0.0030",
+        "About SAR 0.61",
+        "About SAR 0.20"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "200 a second is 720,000 an hour; 0.6075 / 720 is about SAR 0.00084 per 1,000.",
+      "misconceptions": [
+        "",
+        "That divides by the predictions of one minute, not of one hour",
+        "That is the hourly cost, not the cost of 1,000 predictions",
+        "That divides the hourly cost by three replicas"
+      ],
+      "lo": [
+        "LO6"
+      ],
+      "day": 3,
+      "session": 4,
+      "level": "apply",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-cpu-gpu",
+      "type": "single",
+      "prompt": "Farz predicts in about one millisecond on a processor. A colleague proposes one graphics-processor replica to cut latency. What does the evidence say?",
+      "options": [
+        "Do it: graphics processors are faster for every model",
+        "Split the traffic between both",
+        "Do it for the 99th percentile only",
+        "Keep processors: the model is not the slow part, and the graphics replica costs far more per 1,000 predictions"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "Measure where the time goes first; for a small tabular model a processor is cheaper and as fast.",
+      "misconceptions": [
+        "A logistic regression on ten features has little to parallelise",
+        "Two kinds of replica double the work without fixing the slow path",
+        "The tail comes from the policy lookup, not from the model",
+        ""
+      ],
+      "lo": [
+        "LO6"
+      ],
+      "day": 3,
+      "session": 4,
+      "level": "apply",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-canary-compare",
+      "type": "single",
+      "prompt": "A canary of farz 1.1.0 has served 160 requests with no errors and a slightly lower p95. Rifd's criteria say to judge only after 200 requests. What do you do?",
+      "options": [
+        "Promote now, the numbers look good",
+        "Keep the canary at 10% until it has served at least 200 requests, then apply the criteria",
+        "Roll back to be safe",
+        "Raise the canary to 50% to finish faster"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Criteria written before the release say how much evidence is needed; wait for it.",
+      "misconceptions": [
+        "Below the minimum the numbers are too few to judge",
+        "",
+        "Nothing has fired; rolling back throws the evidence away",
+        "A larger share exposes more callers before any judgement"
+      ],
+      "lo": [
+        "LO7"
+      ],
+      "day": 4,
+      "session": 1,
+      "level": "apply",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-rollback-who",
+      "type": "single",
+      "prompt": "During a canary of farz 1.2.0 the investigate share rises from 19% to 41%. Who decides the rollback at Rifd, and who executes it?",
+      "options": [
+        "The data scientist decides and executes",
+        "The cluster decides automatically",
+        "Munira Al-Ajmi decides; the on-call engineer executes, and rolls back first when a written criterion fires",
+        "The adjusters decide by vote"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "The runbook names the accountable person; a written criterion lets the on-call engineer act first and report.",
+      "misconceptions": [
+        "Adel built the model; the runbook gives the decision to the business owner",
+        "Automation can execute; the runbook names a person accountable for the decision",
+        "",
+        "The criteria and the accountable person are written before the release"
+      ],
+      "lo": [
+        "LO7"
+      ],
+      "day": 4,
+      "session": 2,
+      "level": "understand",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-shadow",
+      "type": "single",
+      "prompt": "A new Farz version changes how claims are triaged. Munira wants evidence on real traffic before any claim is triaged by it. Which release strategy fits?",
+      "options": [
+        "A shadow release: copy every request to the new version and keep only the current version's answer",
+        "A rolling update",
+        "A canary at 10%",
+        "Blue-green with an immediate switch"
+      ],
+      "correct": [
+        0
+      ],
+      "explanation": "Shadow traffic measures the new version on real requests without letting its answers reach anyone.",
+      "misconceptions": [
+        "",
+        "Every claim would be triaged by the new version within minutes",
+        "One claim in ten would be triaged by the new version",
+        "The switch sends all traffic to the new version at once"
+      ],
+      "lo": [
+        "LO7"
+      ],
+      "day": 4,
+      "session": 1,
+      "level": "apply",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-psi-vs-p",
+      "type": "single",
+      "prompt": "In week 3, policy tenure has a KS p-value of 0.04 and a PSI of 0.013, while the motor claim amounts have a PSI of 0.35. What should the drift report say?",
+      "options": [
+        "Both features shifted: both are significant",
+        "Only tenure: it has the smaller p-value",
+        "Neither: p-values above 0.01 mean no drift",
+        "Tenure moved slightly and does not matter; motor amounts shifted"
+      ],
+      "correct": [
+        3
+      ],
+      "explanation": "A p-value says a move is not chance; the PSI says how large it is. Report the large shift and name the small one as negligible.",
+      "misconceptions": [
+        "With thousands of claims, a tiny move is significant; PSI shows its size",
+        "The motor amounts were not tested with that p-value; the PSI is large",
+        "The motor amounts move far beyond any threshold",
+        ""
+      ],
+      "lo": [
+        "LO7"
+      ],
+      "day": 4,
+      "session": 3,
+      "level": "analyze",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-pooled-drift",
+      "type": "single",
+      "prompt": "Over all claims, the amount has a PSI of 0.06 in week 4. By line, motor amounts have 0.29, health and property under 0.04. What does this show?",
+      "options": [
+        "No drift, since 0.06 is below 0.1",
+        "A shift in motor amounts that pooling over lines diluted",
+        "A shift in every line",
+        "A data error, since the numbers disagree"
+      ],
+      "correct": [
+        1
+      ],
+      "explanation": "Compute drift where the model's behaviour differs: by segment as well as overall.",
+      "misconceptions": [
+        "The pooled number hides a segment that shifted",
+        "",
+        "Health and property are stable",
+        "Both numbers are right; they describe different populations"
+      ],
+      "lo": [
+        "LO7"
+      ],
+      "day": 4,
+      "session": 3,
+      "level": "analyze",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    },
+    {
+      "id": "q-delayed-labels",
+      "type": "single",
+      "prompt": "Labels for a claim arrive about two weeks after it is filed. In week 4, what can Rifd conclude about concept drift for weeks 3 and 4?",
+      "options": [
+        "That there is none, because accuracy in weeks 1 and 2 was stable",
+        "That there is concept drift, because the inputs moved",
+        "Nothing yet: the labels that would show it have not arrived; watch the inputs and predictions until they do",
+        "That the model must be retrained now"
+      ],
+      "correct": [
+        2
+      ],
+      "explanation": "Data drift is visible at once; concept drift waits for labels. Say what is known and what is not.",
+      "misconceptions": [
+        "Weeks 1 and 2 came before the shift",
+        "Inputs can move while the relation between inputs and labels stays the same",
+        "",
+        "Retraining on unlabelled weeks is not possible, and the trigger needs evidence"
+      ],
+      "lo": [
+        "LO7"
+      ],
+      "day": 4,
+      "session": 3,
+      "level": "understand",
+      "pool": "practice",
+      "weight": 1,
+      "timer": 30
+    }
+  ]
+}

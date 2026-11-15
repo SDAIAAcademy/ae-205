@@ -1,0 +1,5 @@
+{"claim_id": "CLM-050123", "line": "motor", "region": "riyadh", "channel": "app",
+ "amount_sar": 4200.0, "policy_tenure_months": 30, "prior_claims_12m": 0, "days_to_report": 1,
+ "vehicle_age_years": 5, "police_report": true,
+ "description": "Rear bumper damaged at a junction",
+ "member": {"name": "Arwa Al-Malki", "national_id": "1234567890", "mobile": "0512345678"}}

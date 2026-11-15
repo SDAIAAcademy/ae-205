@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-ax="lab" data-track="ai-engineering">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 3.3 · Three rates against the objective · Deploying AI Services: Containers, Serving and Monitoring</title>
+<meta name="generator" content="SDAIA Academy engine 1.0.0">
+<link rel="icon" href="../_engine/icon.svg">
+<link rel="alternate" type="text/markdown" href="D3_3_load_test.md">
+<link rel="describedby" href="../llms.txt">
+<link rel="stylesheet" href="../_engine/academy.css">
+</head>
+<body>
+<header>
+<div class="wrap">
+<div class="top"><div class="logo"></div><nav><a href="../index.html">Course page</a><a href="../slides/day3.html#lab-3-3">Back to the slides</a></nav></div>
+<span class="tag">Lab 3.3</span>
+<h1>Three rates against the objective</h1>
+<p>Run a load test at three request rates and find where latency breaks the objective.</p>
+<div class="meta"><span>25 minutes</span><span>Day 3</span><span>Session 3: Load testing</span></div>
+</div>
+</header>
+<main class="wrap">
+<article class="lab" data-lab="3.3">
+  <div class="box goal">
+    <h3>Goal</h3>
+    <p>Load Farz the way the claims system will after a flood: an open load of real claims at fixed rates. Find the rate at which the 95th percentile breaks Munira's objective of 150 ms, and say why it breaks there.</p>
+  </div>
+
+  <h2>What you need</h2>
+  <ul>
+    <li>The lab folder <code>rifd-labs/3.3</code>: <code>tools/loadtest.py</code>, which sends <code>loadtest/one_claim.csv</code> by default, and <code>loadtest/locustfile.py</code></li>
+    <li><code>../data/objective.json</code>: p95 at or under 150 ms at 200 requests a second, errors at or under 1%</li>
+    <li>A quiet laptop: close other heavy programs, because the load generator and the service share its processors</li>
+    <li>AI policy: tutor.</li>
+  </ul>
+
+  <div class="step">
+    <h3>Read the objective and the locust file <span class="min">4 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">cd rifd-labs/3.3
+cat ../data/objective.json
+sed -n 1,12p loadtest/locustfile.py</code></pre>
+    <p>Note who owns the objective and where latency is measured. In the locust file, find how a number of users becomes a rate, and when that stops being true.</p>
+  </div>
+
+  <div class="step">
+    <h3>Make the requests realistic <span class="min">5 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run uvicorn rifd.app:app --host 127.0.0.1 --port 8000 --log-level warning &amp;
+uv run python tools/loadtest.py --rates 100 --seconds 15 --out runs/load_one_claim.json</code></pre>
+    <p>That is the supplied test: one motor claim, over and over. In <code>tools/loadtest.py</code>, change the default <code>--file</code> to <code>../data/replay/week1.csv</code>, the week of claims Farz will see.</p>
+  </div>
+
+  <div class="step">
+    <h3>Run three rates with a warm-up <span class="min">10 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run python tools/loadtest.py --rates 80 150 220 --seconds 20 --warmup 3 --label "1 worker" --out runs/load.json</code></pre>
+    <p>If every rate holds or every rate breaks, choose others: the check asks for one on each side. Locust is an option: <code>uv run locust -f loadtest/locustfile.py --headless --host http://127.0.0.1:8000 --users 150 --spawn-rate 50 --run-time 40s --only-summary</code>.</p>
+  </div>
+
+  <div class="step">
+    <h3>Report where the objective breaks; check <span class="min">6 min</span></h3>
+    <p>Write <code>runs/load_note.md</code>: the table of rates, where the objective breaks, and why, with the trace of lab 3.2 in mind. Stop the server.</p>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run ../lab.py check 3.3</code></pre>
+  </div>
+
+  <div class="step stretch">
+    <h3>✱ Stretch</h3>
+    <p>Run the same rates with k6 and compare the two tools' numbers.</p>
+  </div>
+
+  <h2>Check yourself</h2>
+  <ol class="checks">
+    <li>Why did one claim a hundred times a second give a 95th percentile that was too good?</li>
+    <li>At the rate where the objective broke, did the achieved rate keep up with the target?</li>
+    <li>What would change these numbers on the cluster, compared with your laptop?</li>
+  </ol>
+
+  <details class="instructor">
+    <summary>For the trainer</summary>
+    <p>In the course's final run (one worker): the one-claim test at 100 a second reported a 95th percentile of 18.5 ms; the replay claims held the objective at 40 a second (131.9 ms) and at 100 a second (131.1 ms) and broke it at 220 (536.5 ms, with only 170 a second achieved). The floor of the 95th percentile is the 120 ms policy lookup that about 7% of claims make; the one-claim test never takes that path. Lab 3.4's run put one worker's capacity between 120 and 160 a second.</p>
+    <p>Later runs on 15 November 2026, on the same laptop shared with several other heavy jobs, gave very different numbers: 40 a second held (95th percentile 137 ms, set by the lookup), while 100 and 220 a second broke it badly (about 1 s), with the achieved rate stuck near 85 to 88 a second; even the one-claim test broke at 100 a second (755 ms). A load test measures the machine as well as the service, so capacity is measured on the hardware that will serve, with nothing else running. The solution takes its rates from <code>RIFD_RATES</code> (default <code>40 100 220</code>) so that a trainer can move them. Rehearse on a room machine and put your numbers on the slide. Solution: <code>labs/solutions/S3_3.py</code>.</p>
+  </details>
+</article>
+<nav class="pager"><a href="D3_2_logs_traces.html" rel="prev">← Previous lab</a><a href="D3_4_sizing_cost.html" rel="next">Next lab →</a></nav>
+</main>
+<footer><div class="wrap">SDAIA Academy · AI Engineering Track · Deploying AI Services: Containers, Serving and Monitoring<br><span class="muted">Course version 2027.1.0 · engine 1.0.0 · built 2026-11-15 · commit fec8449</span></div></footer>
+<script type="application/json" id="academy-data">{"v":1,"engine":"1.0.0","build":{"at":"2026-11-15T09:27:24Z","version":"2027.1.0","commit":"fec8449"},"course":{"id":"ae-205","code":"AE-205","title":"Deploying AI Services: Containers, Serving and Monitoring","track":"ai-engineering","lang":"en","dir":"ltr","url":"https://sdaiaacademy.github.io/ae-205/","repo":"SDAIAAcademy/ae-205","home":"../index.html"},"lab":{"id":"3.3","title":"Three rates against the objective","summary":"Run a load test at three request rates and find where latency breaks the objective.","minutes":25,"day":3,"unit":"Day 3","session":3,"deck":"../slides/day3.html#lab-3-3","prev":"D3_2_logs_traces.html","next":"D3_4_sizing_cost.html","alt":{}},"ai":{"context":{"course":"../context/course.md","courseJs":"../context/course.js","day":null,"llms":"../llms.txt"},"tasks":[],"tools":[]},"features":{},"strings":{}}</script>
+<script src="../_engine/academy.js"></script>
+</body>
+</html>

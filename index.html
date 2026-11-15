@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-ax="page" data-track="ai-engineering">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deploying AI Services: Containers, Serving and Monitoring · SDAIA Academy</title>
+<meta name="generator" content="SDAIA Academy engine 1.0.0">
+<meta name="description" content="Take a trained model from a notebook to a versioned, containerised, monitored service, size it against a latency objective, and release and roll it back on evidence">
+<link rel="icon" href="_engine/icon.svg">
+<link rel="alternate" type="text/markdown" href="index.md">
+<link rel="describedby" href="llms.txt">
+<link rel="stylesheet" href="_engine/academy.css">
+</head>
+<body>
+<header>
+<div class="wrap">
+<div class="top"><div class="logo" id="logo"></div><nav><a href="slides/day1.html">Slides</a><a href="practice.html">Practice</a><a href="index.md" type="text/markdown">Markdown</a></nav></div>
+<div class="kicker">AI Engineering Track · SDAIA Academy · AE-205</div>
+<h1>Deploying AI Services: Containers, Serving and Monitoring<span class="sub ar" lang="ar" dir="rtl">نشر خدمات الذكاء الاصطناعي: الحاويات وتقديم النماذج والمراقبة</span></h1>
+<p>Take a trained model from a notebook to a versioned, containerised, monitored service, size it against a latency objective, and release and roll it back on evidence</p>
+<div class="meta"><span class="track">AI Engineering Track</span><span>4 teaching days + capstone day</span><span>26 hours</span><span>Level 200</span><span>AI Engineering · Assistant badge</span></div>
+</div>
+</header>
+<main class="wrap">
+<h2>About the course</h2>
+<p>Participants take two trained models from a notebook to a monitored service. For a fictional mutual insurer they package a claims-triage classifier and a similar-claims embedding model with pinned dependencies, register model versions, serve them behind a versioned API with input validation, build and scan a container image, run it on a single-node local cluster with health checks, add metrics, structured logs and traces, load-test and size the service, release a new version by canary and roll it back, and detect drift in a replayed stream of claims.</p>
+<p><b>Who it is for:</b> Practitioners. Graduates and early-career developers who have completed the FN courses or passed the placement test, and software engineers moving into AI work.</p>
+<p><b>Format:</b> Intensive: 4 teaching days of four sessions and a capstone day, with guided pre-work and a tracked follow-up task</p>
+<h2>The case study</h2>
+<div class="note info"><b>Rifd Mutual Insurance.</b> Rifd Mutual Insurance is a fictional cooperative insurer whose claims team wants two notebook models in service: Farz, which triages each new motor, health or property claim, and Shabih, which finds similar past claims for an adjuster. Every lab works on 50,000 synthetic claims made by a seeded generator, the models the kit trains on a laptop processor, and four weeks of replayed claims with drift injected from the third week; the personal fields in the data are invented.</div>
+<h2>The course</h2>
+<div class="day">
+<div class="day-head c-teal"><div><div class="t">Day 1 · 4 sessions · 4 labs</div><h3>Package and serve</h3></div><a class="btn" href="slides/day1.html">Open the slides</a></div>
+<div class="scroll"><table>
+<tr><th>Session</th><th>Topic</th><th>Lab</th></tr>
+<tr><td>1</td><td><b>From notebook to artefact</b><br>The path from a trained model to a served prediction, serialisation formats, signatures, pins and the decision logic that hides in a notebook<ul><li>Name the artefact, image, registry, runtime, endpoint and monitor on a deployment path</li><li>Convert a notebook pickle into an artefact with a signature, pins and its decision rule</li><li>Prove an artefact by reloading it in a clean environment against reference predictions</li></ul></td><td><a href="labs/D1_1_export_artefact.html">Lab 1.1 · Export Farz as an artefact</a> <span class="muted">(25 min)</span></td></tr>
+<tr><td>2</td><td><b>A registry for model versions</b><br>Immutable versions with metrics, tags and lineage, aliases for champion and challenger, and loading by version<ul><li>Register a model version with metrics, a data hash and a commit</li><li>Explain why a registered version is never overwritten</li><li>Load a model by version and by alias and say when to use each</li></ul></td><td><a href="labs/D1_2_registry.html">Lab 1.2 · Register two versions</a> <span class="muted">(25 min)</span></td></tr>
+<tr><td>3</td><td><b>A prediction API with a contract</b><br>Online, batch and streaming prediction, a contract written first, input validation, typed errors and a version in the path<ul><li>Choose online, batch or streaming prediction for a use case</li><li>Validate a request against a written contract before the model sees it</li><li>Return typed errors that a caller can act on</li></ul></td><td><a href="labs/D1_3_prediction_api.html">Lab 1.3 · A versioned endpoint with a contract</a> <span class="muted">(25 min)</span></td></tr>
+<tr><td>4</td><td><b>Health, readiness and warm-up</b><br>Liveness and readiness as two questions, loading and warming the model at start, and what a service does when its model file is missing<ul><li>Separate a liveness check from a readiness check</li><li>Load and warm a model before the service accepts traffic</li><li>Show the behaviour of each check when the model file fails to load</li></ul></td><td><a href="labs/D1_4_health_readiness.html">Lab 1.4 · Health and readiness checks</a> <span class="muted">(25 min)</span></td></tr>
+</table></div>
+</div>
+<div class="day">
+<div class="day-head c-cyan"><div><div class="t">Day 2 · 4 sessions · 4 labs</div><h3>Containers and a cluster</h3></div><a class="btn" href="slides/day2.html">Open the slides</a></div>
+<div class="scroll"><table>
+<tr><th>Session</th><th>Topic</th><th>Lab</th></tr>
+<tr><td>1</td><td><b>Images that are small and reproducible</b><br>Layers and the build cache, multi-stage builds from the lock file, slim bases, a non-root user and what to leave out<ul><li>Read a container file and predict which layers a change rebuilds</li><li>Write a multi-stage container file that installs from the lock file</li><li>Measure image size and build time and explain the difference</li></ul></td><td><a href="labs/D2_1_multi_stage_image.html">Lab 2.1 · A multi-stage container file</a> <span class="muted">(25 min)</span></td></tr>
+<tr><td>2</td><td><b>Scanning and configuration</b><br>What a scanner reads and reports, severities and fixed versions, secrets in image layers, and configuration from the environment<ul><li>Read a vulnerability report and pick the finding to fix first</li><li>Fix a finding by moving to a fixed version and scan again</li><li>Move a secret out of an image into configuration the runtime supplies</li></ul></td><td><a href="labs/D2_2_scan_and_config.html">Lab 2.2 · Scan, fix, configure</a> <span class="muted">(25 min)</span></td></tr>
+<tr><td>3</td><td><b>Running on a local cluster</b><br>Deployments, services and probes, requests and limits, rolling updates, and where a service may run under data rules<ul><li>Deploy a service with probes and resource limits to a single-node cluster</li><li>Diagnose a pod that does not become ready from its events</li><li>Decide where each service may run from its data classification</li></ul></td><td><a href="labs/D2_3_local_cluster.html">Lab 2.3 · Deploy to a local cluster</a> <span class="muted">(25 min)</span></td></tr>
+<tr><td>4</td><td><b>Serving the embedding model</b><br>An embedding model as a service: vectors and an index in memory, start-up time, a startup probe and a deployment of its own<ul><li>Serve a nearest-neighbour search behind a versioned endpoint</li><li>Measure memory and time to ready for two models</li><li>Decide whether two models share a deployment</li></ul></td><td><a href="labs/D2_4_similar_claims.html">Lab 2.4 · The similar-claims endpoint</a> <span class="muted">(25 min)</span></td></tr>
+</table></div>
+</div>
+<div class="day">
+<div class="day-head c-coral"><div><div class="t">Day 3 · 4 sessions · 4 labs</div><h3>Observe and size</h3></div><a class="btn" href="slides/day3.html">Open the slides</a></div>
+<div class="scroll"><table>
+<tr><th>Session</th><th>Topic</th><th>Lab</th></tr>
+<tr><td>1</td><td><b>Metrics that matter</b><br>Rate, errors and duration, histograms and their buckets, percentiles, the distribution of predictions and dashboards defined as code<ul><li>Instrument a service with request, error and latency metrics</li><li>Compute the 50th, 95th and 99th percentiles from histogram buckets</li><li>Define a dashboard as code with latency, errors and predictions</li></ul></td><td><a href="labs/D3_1_metrics.html">Lab 3.1 · Rate, errors and latency</a> <span class="muted">(25 min)</span></td></tr>
+<tr><td>2</td><td><b>Logs and traces</b><br>Structured logs with a request id, personal fields redacted at the edge, and traces that show where one slow request spent its time<ul><li>Write one structured log line per request with a request id</li><li>Redact personal fields before they reach a log or a trace, and test it</li><li>Follow one slow request through its spans to the slow step</li></ul></td><td><a href="labs/D3_2_logs_traces.html">Lab 3.2 · Logs, redaction and a trace</a> <span class="muted">(25 min)</span></td></tr>
+<tr><td>3</td><td><b>Load testing</b><br>Open and closed load, warm-up, steady rates, percentiles under load and the knee where latency breaks the objective<ul><li>Write a load test that sends realistic requests at a fixed rate</li><li>Run it at three rates and read percentiles, errors and throughput</li><li>Locate the rate at which the 95th percentile breaks the objective</li></ul></td><td><a href="labs/D3_3_load_test.html">Lab 3.3 · Three rates against the objective</a> <span class="muted">(25 min)</span></td></tr>
+<tr><td>4</td><td><b>Sizing and cost</b><br>Workers and replicas, concurrency on a processor, headroom, processor against graphics-processor serving and the cost of 1,000 predictions<ul><li>Measure the rate one worker carries within the objective</li><li>Choose workers and replicas for a target rate with headroom</li><li>Compute the cost per 1,000 predictions of a configuration</li></ul></td><td><a href="labs/D3_4_sizing_cost.html">Lab 3.4 · Workers, replicas and cost</a> <span class="muted">(25 min)</span></td></tr>
+</table></div>
+</div>
+<div class="day">
+<div class="day-head c-purple"><div><div class="t">Day 4 · 4 sessions · 4 labs</div><h3>Release and watch</h3></div><a class="btn" href="slides/day4.html">Open the slides</a></div>
+<div class="scroll"><table>
+<tr><th>Session</th><th>Topic</th><th>Lab</th></tr>
+<tr><td>1</td><td><b>Rolling, canary and shadow releases</b><br>Blue-green, rolling, canary and shadow releases, and comparing a canary with the current version on the same metrics<ul><li>Choose a release strategy for a change and its risk</li><li>Send a fixed share of traffic to a new version</li><li>Compare two versions on errors, latency and predictions</li></ul></td><td><a href="labs/D4_1_canary.html">Lab 4.1 · A 10% canary</a> <span class="muted">(25 min)</span></td></tr>
+<tr><td>2</td><td><b>Rollback on evidence</b><br>Rollback criteria written before the release, who decides, rolling back first and diagnosing second<ul><li>Apply written rollback criteria to a canary's metrics</li><li>Roll back within a time limit and record the evidence</li><li>Name the person accountable for the decision</li></ul></td><td><a href="labs/D4_2_rollback.html">Lab 4.2 · Roll back a faulty version</a> <span class="muted">(25 min)</span></td></tr>
+<tr><td>3</td><td><b>Drift in replayed traffic</b><br>Data drift and concept drift, distribution tests and population stability, delayed labels and when drift should start a retraining<ul><li>Compute a drift statistic per feature against the training data</li><li>Name the shifted features and rule out a noisy one</li><li>Say what delayed labels allow you to conclude, and when</li></ul></td><td><a href="labs/D4_3_drift.html">Lab 4.3 · Drift in four weeks</a> <span class="muted">(25 min)</span></td></tr>
+<tr><td>4</td><td><b>Alerts and a runbook</b><br>Alerts on symptoms the caller feels, durations that stop flapping, a runbook the on-call engineer can follow and the person who decides a rollback<ul><li>Write an alert rule on error ratio and one on latency</li><li>Test both rules against a recorded error spike</li><li>Write a one-page runbook with the accountable person</li></ul></td><td><a href="labs/D4_4_alerts_runbook.html">Lab 4.4 · Two alerts and a runbook</a> <span class="muted">(25 min)</span></td></tr>
+</table></div>
+</div>
+<div class="day">
+<div class="day-head c-amber"><div><div class="t">Capstone</div><h3>Capstone: a monitored service and its defence</h3></div><a class="btn" href="slides/capstone.html">Open the slides</a></div>
+<div class="scroll"><table><tr><td>Eight minutes to show the service, four minutes of questions, and one fault injected by the assessor</td></tr></table></div>
+</div>
+<h2>Capstone</h2>
+<div class="two">
+<div><p>A model of the participant's choice taken to a monitored service, submitted as a public repository with container file, deployment manifests and dashboards as code, and a README reporting load-test results against a latency objective, a recorded canary release and rollback and a drift check, followed by an eight-minute defence and four minutes of questions</p><p><b>What you submit:</b> A public GitHub repository link: the service with its container file, deployment manifests, dashboard and alert rules as code, and a README that reports the load-test results against a stated latency objective, the recorded canary release and rollback, and a drift check, with the command that produced each number.</p><p><b>Format:</b> 8 min talk and demo · 4 min Q&amp;A</p></div>
+<div><h3>Rubric</h3><div class="bar c-teal"><span>Packaging and API<i style="--w:80%"></i></span><b>20%</b></div><div class="bar c-cyan"><span>Container and deployment<i style="--w:80%"></i></span><b>20%</b></div><div class="bar c-coral"><span>Observability<i style="--w:80%"></i></span><b>20%</b></div><div class="bar c-purple"><span>Sizing against the objective<i style="--w:60%"></i></span><b>15%</b></div><div class="bar c-amber"><span>Release, rollback and drift<i style="--w:100%"></i></span><b>25%</b></div></div>
+</div>
+<h2>Outcomes</h2>
+<p>By the end of the course, participants can:</p>
+<div class="day"><div class="scroll"><table>
+<tr><th></th><th>Outcomes</th><th>Level</th><th>Evidence</th></tr>
+<tr><td><b>LO1</b></td><td>Explain the path from a trained model to a served prediction, naming the artefact, image, registry, runtime, endpoint and monitor at each step, given a deployment diagram with the components unlabelled</td><td>Awareness</td><td>a labelled diagram with a one-sentence role for each component, scored against the reference</td></tr>
+<tr><td><b>LO2</b></td><td>Prepare a model artefact with pinned dependencies, a version, an input and output signature and a reproducible build, given a trained model and its training script</td><td>Applied</td><td>a registered model version that a fresh environment loads and that reproduces ten reference predictions</td></tr>
+<tr><td><b>LO3</b></td><td>Implement a versioned prediction API with input validation, typed errors and separate health and readiness checks, given the registered model and an API contract</td><td>Applied</td><td>a passing contract test suite, including malformed inputs and a model file that fails to load</td></tr>
+<tr><td><b>LO4</b></td><td>Configure a container image for the service, scan it for vulnerabilities and run it with resource limits on a single-node cluster, given the service code and a base image</td><td>Applied</td><td>an image under a stated size, a scan report with no critical findings and a deployment that passes its readiness check</td></tr>
+<tr><td><b>LO5</b></td><td>Implement metrics, structured logs and traces for the service and a dashboard for latency percentiles, error rate and prediction distribution, given the running service and a load generator</td><td>Applied</td><td>a dashboard defined as code and an alert rule that fires on a seeded error spike</td></tr>
+<tr><td><b>LO6</b></td><td>Measure latency and throughput under load and size workers and replicas to meet a latency objective at the lowest cost, given a target request rate and a 95th-percentile latency objective set by the insurer, on laptop CPUs</td><td>Applied</td><td>a load-test report with the chosen configuration and its cost per 1,000 predictions</td></tr>
+<tr><td><b>LO7</b></td><td>Deliver a new model version by canary release, decide on promotion or rollback from monitored metrics and detect drift in replayed traffic, given two model versions, four weeks of replayed claims with injected drift and written rollback criteria</td><td>Performance</td><td>a release log with the decision and its evidence, a completed rollback and a drift report naming the shifted features</td></tr>
+</table></div></div>
+<h2>Tools</h2>
+<div class="grid">
+<div class="card c-teal"><h3>Container runtime and image builder</h3><p>Podman · Docker</p></div>
+<div class="card c-cyan"><h3>Local single-node cluster</h3><p>kind · k3d · minikube</p></div>
+<div class="card c-coral"><h3>Model registry and tracking</h3><p>MLflow · a Git repository with tagged artefacts</p></div>
+<div class="card c-purple"><h3>Serving framework</h3><p>FastAPI · Ray Serve · KServe</p></div>
+<div class="card c-green"><h3>Metrics, dashboards and alerts</h3><p>Prometheus with Grafana · OpenTelemetry Collector with any compatible back end</p></div>
+<div class="card c-teal"><h3>Tracing and structured logging</h3><p>OpenTelemetry · structlog</p></div>
+<div class="card c-cyan"><h3>Image vulnerability scanning</h3><p>Trivy · Grype</p></div>
+<div class="card c-coral"><h3>Load testing</h3><p>Locust · k6</p></div>
+<div class="card c-purple"><h3>Drift statistics</h3><p>SciPy · Evidently</p></div>
+</div>
+<h2>Before you start</h2>
+<h3>Prerequisites</h3>
+<ul><li>FN-102 Command Line, Git and Reproducible Projects</li><li>AE-201 Machine Learning Foundations and Model Evaluation</li><li>Runs commands in a Linux shell</li><li>Has trained a model and saved it to a file</li></ul>
+<div class="note tip">The labs are pages in your browser, linked from the table above and from the slides.</div>
+<h2>Sources</h2>
+<h3>Containers and clusters</h3>
+<ul><li><a href="https://docs.docker.com/build/building/multi-stage/">Docker Docs: Multi-stage builds</a></li><li><a href="https://docs.docker.com/build/building/best-practices/">Docker Docs: Building best practices</a></li><li><a href="https://docs.astral.sh/uv/guides/integration/docker/">uv: Using uv in Docker</a></li><li><a href="https://docs.astral.sh/uv/concepts/projects/sync/">uv: Locking and syncing</a></li><li><a href="https://podman.io/docs">Podman: Getting started</a></li><li><a href="https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/">Kubernetes: Liveness, readiness and startup probes</a></li><li><a href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/">Kubernetes: Configure liveness, readiness and startup probes</a></li><li><a href="https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/">Kubernetes: Resource management for pods and containers</a></li><li><a href="https://kubernetes.io/docs/concepts/workloads/controllers/deployment/">Kubernetes: Deployments</a></li><li><a href="https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/">Kubernetes: Horizontal Pod Autoscaling</a></li><li><a href="https://kubernetes.io/docs/concepts/configuration/secret/">Kubernetes: Secrets</a></li><li><a href="https://kind.sigs.k8s.io/docs/user/quick-start/">kind: Quick start</a></li><li><a href="https://github.com/k3d-io/k3d">k3d (repository)</a></li><li><a href="https://minikube.sigs.k8s.io/docs/start/">minikube start</a></li><li><a href="https://12factor.net/config">The Twelve-Factor App: Config</a></li></ul>
+<h3>Scanning</h3>
+<ul><li><a href="https://trivy.dev/latest/docs/">Trivy documentation</a></li><li><a href="https://github.com/anchore/grype">Grype (repository)</a></li><li><a href="https://github.com/pypa/pip-audit">pip-audit (repository)</a></li><li><a href="https://osv.dev/">OSV: Open Source Vulnerabilities</a></li></ul>
+<h3>Artefacts, registries and serving</h3>
+<ul><li><a href="https://docs.python.org/3/library/pickle.html">Python: pickle (the security warning)</a></li><li><a href="https://skops.readthedocs.io/en/stable/persistence.html">skops: Secure persistence</a></li><li><a href="https://mlflow.org/docs/latest/ml/model-registry/">MLflow: Model registry</a></li><li><a href="https://mlflow.org/docs/latest/ml/model/signatures/">MLflow: Model signatures and input examples</a></li><li><a href="https://fastapi.tiangolo.com/tutorial/handling-errors/">FastAPI: Handling errors</a></li><li><a href="https://fastapi.tiangolo.com/advanced/testing-dependencies/">FastAPI: Testing dependencies with overrides</a></li><li><a href="https://fastapi.tiangolo.com/deployment/docker/">FastAPI in containers</a></li><li><a href="https://uvicorn.dev/deployment/">Uvicorn: Deployment</a></li><li><a href="https://docs.pydantic.dev/latest/concepts/models/">Pydantic: Models</a></li><li><a href="https://www.rfc-editor.org/rfc/rfc9457.html">RFC 9457: Problem Details for HTTP APIs</a></li><li><a href="https://docs.ray.io/en/latest/serve/index.html">Ray Serve</a></li><li><a href="https://kserve.github.io/website/">KServe</a></li></ul>
+<h3>Observability, load and releases</h3>
+<ul><li><a href="https://prometheus.io/docs/practices/histograms/">Prometheus: Histograms and summaries</a></li><li><a href="https://prometheus.io/docs/prometheus/latest/querying/functions/">Prometheus: Query functions</a></li><li><a href="https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/">Prometheus: Alerting rules</a></li><li><a href="https://prometheus.github.io/client_python/">Prometheus Python client</a></li><li><a href="https://grafana.com/docs/grafana/latest/dashboards/build-dashboards/view-dashboard-json-model/">Grafana: Dashboard JSON model</a></li><li><a href="https://opentelemetry.io/docs/languages/python/">OpenTelemetry: Python</a></li><li><a href="https://opentelemetry.io/docs/concepts/signals/traces/">OpenTelemetry: Traces</a></li><li><a href="https://www.structlog.org/en/stable/">structlog documentation</a></li><li><a href="https://docs.locust.io/en/stable/">Locust documentation</a></li><li><a href="https://grafana.com/docs/k6/latest/">Grafana k6 documentation</a></li><li><a href="https://sre.google/sre-book/monitoring-distributed-systems/">Google SRE book: Monitoring distributed systems</a></li><li><a href="https://sre.google/workbook/canarying-releases/">Google SRE workbook: Canarying releases</a></li><li><a href="https://sre.google/workbook/alerting-on-slos/">Google SRE workbook: Alerting on SLOs</a></li><li><a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ks_2samp.html">SciPy: ks_2samp</a></li><li><a href="https://docs.evidentlyai.com/">Evidently documentation</a></li></ul>
+<h3>National references</h3>
+<ul><li><a href="https://sdaia.gov.sa/en/SDAIA/about/Documents/PersonalDataProtectionLaw.pdf">Personal Data Protection Law (SDAIA)</a></li><li><a href="https://sdaia.gov.sa/en/SDAIA/about/Documents/ImplementingRegulationPersonalDataProtectionLaw.pdf">Implementing Regulation of the Personal Data Protection Law (SDAIA)</a></li><li><a href="https://sdaia.gov.sa/Documents/RegulationonPersonalDataEN.pdf">Regulation on Personal Data Transfer outside the Kingdom (SDAIA)</a></li><li><a href="https://sdaia.gov.sa/en/SDAIA/about/Documents/DataClassificationPolicy.pdf">Data Classification Policy (NDMO, SDAIA)</a></li><li><a href="https://sdaia.gov.sa/en/SDAIA/about/Documents/ai-principles.pdf">AI Ethics Principles (SDAIA)</a></li><li><a href="https://nca.gov.sa/en/regulatory-documents/controls-list/ccc/">National Cybersecurity Authority: Cloud Cybersecurity Controls</a></li></ul>
+<h2>Files and links</h2>
+<div class="files">
+<a href="practice.html"><b>practice.html</b><span>Practice questions with feedback</span></a>
+<a href="index.md"><b>index.md</b><span>This page as Markdown, for an AI assistant</span></a>
+<a href="llms.txt"><b>llms.txt</b><span>The course for AI assistants (llms.txt)</span></a>
+<a href="https://github.com/SDAIAAcademy/ae-205"><b>SDAIAAcademy/ae-205</b><span>The course repository</span></a>
+</div>
+</main>
+<footer><div class="wrap">SDAIA Academy · AI Engineering Track · Deploying AI Services: Containers, Serving and Monitoring<br><span class="muted">Course version 2027.1.0 · engine 1.0.0 · built 2026-11-15 · commit fec8449</span></div></footer>
+<script type="application/json" id="academy-data">{"v":1,"engine":"1.0.0","build":{"at":"2026-11-15T09:27:24Z","version":"2027.1.0","commit":"fec8449"},"course":{"id":"ae-205","code":"AE-205","title":"Deploying AI Services: Containers, Serving and Monitoring","track":"ai-engineering","lang":"en","dir":"ltr","url":"https://sdaiaacademy.github.io/ae-205/","repo":"SDAIAAcademy/ae-205","home":"index.html"},"ai":{"context":{"course":"context/course.md","courseJs":"context/course.js","day":null,"llms":"llms.txt"},"tasks":[],"tools":[]},"features":{},"strings":{}}</script>
+<script src="_engine/academy.js"></script>
+</body>
+</html>

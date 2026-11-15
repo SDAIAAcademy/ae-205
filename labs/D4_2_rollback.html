@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-ax="lab" data-track="ai-engineering">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 4.2 · Roll back a faulty version · Deploying AI Services: Containers, Serving and Monitoring</title>
+<meta name="generator" content="SDAIA Academy engine 1.0.0">
+<link rel="icon" href="../_engine/icon.svg">
+<link rel="alternate" type="text/markdown" href="D4_2_rollback.md">
+<link rel="describedby" href="../llms.txt">
+<link rel="stylesheet" href="../_engine/academy.css">
+</head>
+<body>
+<header>
+<div class="wrap">
+<div class="top"><div class="logo"></div><nav><a href="../index.html">Course page</a><a href="../slides/day4.html#lab-4-2">Back to the slides</a></nav></div>
+<span class="tag">Lab 4.2</span>
+<h1>Roll back a faulty version</h1>
+<p>Trigger the rollback criteria with a seeded faulty version and roll back within five minutes.</p>
+<div class="meta"><span>25 minutes</span><span>Day 4</span><span>Session 2: Rollback on evidence</span></div>
+</div>
+</header>
+<main class="wrap">
+<article class="lab" data-lab="4.2">
+  <div class="box goal">
+    <h3>Goal</h3>
+    <p>Release farz 1.2.0 as a canary behind 1.1.0, watch it against Munira's written criteria, roll it back within five minutes of the first criterion firing, then find the cause and record the evidence.</p>
+  </div>
+
+  <h2>What you need</h2>
+  <ul>
+    <li>The lab folder <code>rifd-labs/4.2</code> with farz 1.1.0 and 1.2.0 in <code>models/</code>. This lab does not continue from your decision in lab 4.1: in its start state 1.1.0 is the version in service, the router and <code>tools/compare.py</code></li>
+    <li><code>../data/rollback_criteria.md</code> and <code>.json</code>: judge after 200 canary requests; roll back on errors above 1%, a 95th percentile above 150 ms, or a label share that differs by more than 10 points</li>
+    <li>AI policy: tutor.</li>
+  </ul>
+
+  <div class="step">
+    <h3>Read the criteria; start the canary of 1.2.0 <span class="min">5 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">cd rifd-labs/4.2
+cat ../data/rollback_criteria.md
+RIFD_MODEL_DIR=models/farz-1.1.0 uv run uvicorn rifd.app:app --host 127.0.0.1 --port 8001 --log-level warning &amp;
+RIFD_MODEL_DIR=models/farz-1.2.0 uv run uvicorn rifd.app:app --host 127.0.0.1 --port 8002 --log-level warning &amp;
+uv run python tools/router.py --stable http://127.0.0.1:8001 --canary http://127.0.0.1:8002 --weight 0.10 --port 8000 &amp;
+uv run python tools/replay.py --file ../data/replay/week2.csv --url http://127.0.0.1:8000 --rate 50 --out runs/canary.jsonl &amp;</code></pre>
+  </div>
+
+  <div class="step">
+    <h3>Watch until a criterion fires <span class="min">6 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run python tools/compare.py runs/canary.jsonl --criteria ../data/rollback_criteria.json \
+  --stable 1.1.0 --canary 1.2.0 --watch --json runs/compare.json</code></pre>
+  </div>
+
+  <div class="step">
+    <h3>Roll back and time it <span class="min">5 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">curl -s -X POST 127.0.0.1:8000/admin/weight -H "content-type: application/json" \
+  -d '{"canary": 0, "reason": "criterion 3: investigate share"}'
+kill %4
+uv run python tools/replay.py --file ../data/replay/week2.csv --url http://127.0.0.1:8000 --rate 20 --limit 60 --out runs/after_rollback.jsonl</code></pre>
+    <p>Roll back first, diagnose second. <code>runs/router_events.jsonl</code> records when the release started and when the share went to 0.</p>
+  </div>
+
+  <div class="step">
+    <h3>Find the cause; write the release log <span class="min">6 min</span></h3>
+    <p>Compare <code>models/farz-1.1.0/metadata.json</code> with <code>models/farz-1.2.0/metadata.json</code>. Fill <code>RELEASE_LOG.md</code>, including the seconds to share 0, the cause, and who decided.</p>
+  </div>
+
+  <div class="step">
+    <h3>Check <span class="min">3 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run ../lab.py check 4.2</code></pre>
+    <p>Stop the three servers.</p>
+  </div>
+
+  <div class="step stretch">
+    <h3>✱ Stretch</h3>
+    <p>Do the same rollback on the cluster with <code>kubectl rollout undo</code> and compare the time.</p>
+  </div>
+
+  <h2>Check yourself</h2>
+  <ol class="checks">
+    <li>Which criterion fired, and after how many canary requests?</li>
+    <li>Errors and latency looked healthy. What would have happened without a criterion on the label shares?</li>
+    <li>Why did the on-call engineer not wait for Munira before setting the share to 0?</li>
+  </ol>
+
+  <details class="instructor">
+    <summary>For the trainer</summary>
+    <p>In the course's final run the watch fired at 210 canary requests on the label criteria only (errors 0%, 95th percentile 142 ms): the investigate share was 38% against 18% for 1.1.0 and the standard share 24% against 43%. The share went to 0 40 s after the release started, and all 60 claims replayed afterwards were answered by 1.1.0. On an earlier run with the laptop overloaded the latency criterion fired as well.</p>
+    <p>The cause is planted in <code>metadata.json</code>: farz 1.2.0's decision rule sends a claim to investigate at a probability of 0.05 instead of 0.30, so the model file is fine and the release is not. Answers: the label-share criterion, after the minimum of 200 canary requests; adjusters would have received about twice as many investigations, and nobody would have seen it in the errors or latency; the criteria were written in advance so that the on-call engineer can act at once and tell Munira. Solution: <code>labs/solutions/S4_2.py</code>.</p>
+  </details>
+</article>
+<nav class="pager"><a href="D4_1_canary.html" rel="prev">← Previous lab</a><a href="D4_3_drift.html" rel="next">Next lab →</a></nav>
+</main>
+<footer><div class="wrap">SDAIA Academy · AI Engineering Track · Deploying AI Services: Containers, Serving and Monitoring<br><span class="muted">Course version 2027.1.0 · engine 1.0.0 · built 2026-11-15 · commit fec8449</span></div></footer>
+<script type="application/json" id="academy-data">{"v":1,"engine":"1.0.0","build":{"at":"2026-11-15T09:27:24Z","version":"2027.1.0","commit":"fec8449"},"course":{"id":"ae-205","code":"AE-205","title":"Deploying AI Services: Containers, Serving and Monitoring","track":"ai-engineering","lang":"en","dir":"ltr","url":"https://sdaiaacademy.github.io/ae-205/","repo":"SDAIAAcademy/ae-205","home":"../index.html"},"lab":{"id":"4.2","title":"Roll back a faulty version","summary":"Trigger the rollback criteria with a seeded faulty version and roll back within five minutes.","minutes":25,"day":4,"unit":"Day 4","session":2,"deck":"../slides/day4.html#lab-4-2","prev":"D4_1_canary.html","next":"D4_3_drift.html","alt":{}},"ai":{"context":{"course":"../context/course.md","courseJs":"../context/course.js","day":null,"llms":"../llms.txt"},"tasks":[],"tools":[]},"features":{},"strings":{}}</script>
+<script src="../_engine/academy.js"></script>
+</body>
+</html>

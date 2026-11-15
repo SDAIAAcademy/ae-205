@@ -1,0 +1,1195 @@
+{
+  "v": 1,
+  "engine": "1.0.0",
+  "build": {
+    "at": "2026-11-15T09:27:24Z",
+    "version": "2027.1.0",
+    "commit": "fec8449"
+  },
+  "lang": "en",
+  "dir": "ltr",
+  "langs": [
+    "en"
+  ],
+  "alt": {},
+  "course": {
+    "id": "ae-205",
+    "code": "AE-205",
+    "version": "2027.1.0",
+    "title": "Deploying AI Services: Containers, Serving and Monitoring",
+    "tagline": "Take a trained model from a notebook to a versioned, containerised, monitored service, size it against a latency objective, and release and roll it back on evidence",
+    "description": "Participants take two trained models from a notebook to a monitored service. For a fictional mutual insurer they package a claims-triage classifier and a similar-claims embedding model with pinned dependencies, register model versions, serve them behind a versioned API with input validation, build and scan a container image, run it on a single-node local cluster with health checks, add metrics, structured logs and traces, load-test and size the service, release a new version by canary and roll it back, and detect drift in a replayed stream of claims.",
+    "track": "ai-engineering",
+    "track_name": "AI Engineering Track",
+    "level": 200,
+    "badge": {
+      "name": "AI Engineering",
+      "level": "Assistant"
+    },
+    "audience": "Practitioners. Graduates and early-career developers who have completed the FN courses or passed the placement test, and software engineers moving into AI work.",
+    "prerequisites": [
+      "FN-102 Command Line, Git and Reproducible Projects",
+      "AE-201 Machine Learning Foundations and Model Evaluation",
+      "Runs commands in a Linux shell",
+      "Has trained a model and saved it to a file"
+    ],
+    "url": "https://sdaiaacademy.github.io/ae-205/",
+    "repo": "SDAIAAcademy/ae-205",
+    "home": "../index.html",
+    "format": "intensive",
+    "format_note": "Intensive: 4 teaching days of four sessions and a capstone day, with guided pre-work and a tracked follow-up task",
+    "shape": "4 teaching days + capstone day",
+    "hours": {
+      "instruction": 6,
+      "lab": 7,
+      "guided_self_study": 6,
+      "assessment": 1,
+      "capstone": 6,
+      "total": 26
+    },
+    "unit": "day",
+    "outcomes": [
+      {
+        "id": "LO1",
+        "text": "Explain the path from a trained model to a served prediction, naming the artefact, image, registry, runtime, endpoint and monitor at each step, given a deployment diagram with the components unlabelled",
+        "level": "Awareness",
+        "evidence": "a labelled diagram with a one-sentence role for each component, scored against the reference"
+      },
+      {
+        "id": "LO2",
+        "text": "Prepare a model artefact with pinned dependencies, a version, an input and output signature and a reproducible build, given a trained model and its training script",
+        "level": "Applied",
+        "evidence": "a registered model version that a fresh environment loads and that reproduces ten reference predictions"
+      },
+      {
+        "id": "LO3",
+        "text": "Implement a versioned prediction API with input validation, typed errors and separate health and readiness checks, given the registered model and an API contract",
+        "level": "Applied",
+        "evidence": "a passing contract test suite, including malformed inputs and a model file that fails to load"
+      },
+      {
+        "id": "LO4",
+        "text": "Configure a container image for the service, scan it for vulnerabilities and run it with resource limits on a single-node cluster, given the service code and a base image",
+        "level": "Applied",
+        "evidence": "an image under a stated size, a scan report with no critical findings and a deployment that passes its readiness check"
+      },
+      {
+        "id": "LO5",
+        "text": "Implement metrics, structured logs and traces for the service and a dashboard for latency percentiles, error rate and prediction distribution, given the running service and a load generator",
+        "level": "Applied",
+        "evidence": "a dashboard defined as code and an alert rule that fires on a seeded error spike"
+      },
+      {
+        "id": "LO6",
+        "text": "Measure latency and throughput under load and size workers and replicas to meet a latency objective at the lowest cost, given a target request rate and a 95th-percentile latency objective set by the insurer, on laptop CPUs",
+        "level": "Applied",
+        "evidence": "a load-test report with the chosen configuration and its cost per 1,000 predictions"
+      },
+      {
+        "id": "LO7",
+        "text": "Deliver a new model version by canary release, decide on promotion or rollback from monitored metrics and detect drift in replayed traffic, given two model versions, four weeks of replayed claims with injected drift and written rollback criteria",
+        "level": "Performance",
+        "evidence": "a release log with the decision and its evidence, a completed rollback and a drift report naming the shifted features"
+      }
+    ],
+    "case_study": {
+      "name": "Rifd Mutual Insurance",
+      "summary": "Rifd Mutual Insurance is a fictional cooperative insurer whose claims team wants two notebook models in service: Farz, which triages each new motor, health or property claim, and Shabih, which finds similar past claims for an adjuster. Every lab works on 50,000 synthetic claims made by a seeded generator, the models the kit trains on a laptop processor, and four weeks of replayed claims with drift injected from the third week; the personal fields in the data are invented."
+    },
+    "days": [
+      {
+        "id": "day1",
+        "kind": "day",
+        "n": 1,
+        "number": 1,
+        "label": "Day 1",
+        "title": "Package and serve",
+        "subtitle": "From a notebook pickle to a versioned API that checks its inputs and says when it is ready",
+        "shape": "4 sessions · 4 labs",
+        "deck": "../slides/day1.html",
+        "md": "../slides/day1.md",
+        "url": "https://sdaiaacademy.github.io/ae-205/slides/day1.html",
+        "sessions": [
+          {
+            "n": 1,
+            "label": "Session 1",
+            "title": "From notebook to artefact",
+            "summary": "The path from a trained model to a served prediction, serialisation formats, signatures, pins and the decision logic that hides in a notebook",
+            "outcomes": [
+              "Name the artefact, image, registry, runtime, endpoint and monitor on a deployment path",
+              "Convert a notebook pickle into an artefact with a signature, pins and its decision rule",
+              "Prove an artefact by reloading it in a clean environment against reference predictions"
+            ],
+            "lo": [
+              "LO1",
+              "LO2"
+            ],
+            "minutes": 50,
+            "lab": {
+              "id": "1.1",
+              "title": "Export Farz as an artefact",
+              "summary": "Export the claims-triage model with its signature and pinned dependencies and reload it in a clean environment, reproducing ten reference predictions.",
+              "minutes": 25,
+              "href": "../labs/D1_1_export_artefact.html",
+              "steps": [
+                {
+                  "text": "Build the workspace and open lab 1.1",
+                  "minutes": 4
+                },
+                {
+                  "text": "Load the notebook pickle and read what it needs",
+                  "minutes": 5
+                },
+                {
+                  "text": "Export with a signature, pins and the decision rule",
+                  "minutes": 8
+                },
+                {
+                  "text": "Reload in a clean environment; match ten predictions",
+                  "minutes": 6
+                },
+                {
+                  "text": "Check",
+                  "minutes": 2
+                }
+              ],
+              "stretch": "Open the pickle with pickletools and list the imports it would run on load"
+            }
+          },
+          {
+            "n": 2,
+            "label": "Session 2",
+            "title": "A registry for model versions",
+            "summary": "Immutable versions with metrics, tags and lineage, aliases for champion and challenger, and loading by version",
+            "outcomes": [
+              "Register a model version with metrics, a data hash and a commit",
+              "Explain why a registered version is never overwritten",
+              "Load a model by version and by alias and say when to use each"
+            ],
+            "lo": [
+              "LO2"
+            ],
+            "minutes": 50,
+            "lab": {
+              "id": "1.2",
+              "title": "Register two versions",
+              "summary": "Register two supplied model versions with metrics and tags and load one by version.",
+              "minutes": 25,
+              "href": "../labs/D1_2_registry.html",
+              "steps": [
+                {
+                  "text": "Read the two supplied artefacts and their metrics",
+                  "minutes": 4
+                },
+                {
+                  "text": "Register 1.0.0 and 1.1.0 with tags and a data hash",
+                  "minutes": 8
+                },
+                {
+                  "text": "Try to overwrite 1.0.0 and read the refusal",
+                  "minutes": 3
+                },
+                {
+                  "text": "Set the champion alias; load by version and by alias",
+                  "minutes": 7
+                },
+                {
+                  "text": "Check",
+                  "minutes": 3
+                }
+              ],
+              "stretch": "Write the same two registrations as MLflow calls, or as git tags on an artefact repository"
+            }
+          },
+          {
+            "n": 3,
+            "label": "Session 3",
+            "title": "A prediction API with a contract",
+            "summary": "Online, batch and streaming prediction, a contract written first, input validation, typed errors and a version in the path",
+            "outcomes": [
+              "Choose online, batch or streaming prediction for a use case",
+              "Validate a request against a written contract before the model sees it",
+              "Return typed errors that a caller can act on"
+            ],
+            "lo": [
+              "LO3"
+            ],
+            "minutes": 50,
+            "lab": {
+              "id": "1.3",
+              "title": "A versioned endpoint with a contract",
+              "summary": "Build a versioned prediction endpoint that validates inputs and returns typed errors, until the supplied contract tests pass.",
+              "minutes": 25,
+              "href": "../labs/D1_3_prediction_api.html",
+              "steps": [
+                {
+                  "text": "Run the contract tests against the naive endpoint",
+                  "minutes": 3
+                },
+                {
+                  "text": "Write the request and response schemas",
+                  "minutes": 8
+                },
+                {
+                  "text": "Return problem details for each error type",
+                  "minutes": 8
+                },
+                {
+                  "text": "Pass all contract tests",
+                  "minutes": 4
+                },
+                {
+                  "text": "Check",
+                  "minutes": 2
+                }
+              ],
+              "stretch": "Add a batch endpoint that takes up to 100 claims and reports errors per item"
+            }
+          },
+          {
+            "n": 4,
+            "label": "Session 4",
+            "title": "Health, readiness and warm-up",
+            "summary": "Liveness and readiness as two questions, loading and warming the model at start, and what a service does when its model file is missing",
+            "outcomes": [
+              "Separate a liveness check from a readiness check",
+              "Load and warm a model before the service accepts traffic",
+              "Show the behaviour of each check when the model file fails to load"
+            ],
+            "lo": [
+              "LO3"
+            ],
+            "minutes": 50,
+            "lab": {
+              "id": "1.4",
+              "title": "Health and readiness checks",
+              "summary": "Add health and readiness checks and show how they differ when the model file is missing.",
+              "minutes": 25,
+              "href": "../labs/D1_4_health_readiness.html",
+              "steps": [
+                {
+                  "text": "See the old health check say OK with no model",
+                  "minutes": 4
+                },
+                {
+                  "text": "Load and warm the model in the lifespan",
+                  "minutes": 7
+                },
+                {
+                  "text": "Write /livez and /readyz",
+                  "minutes": 6
+                },
+                {
+                  "text": "Test both with the model file missing",
+                  "minutes": 6
+                },
+                {
+                  "text": "Check",
+                  "minutes": 2
+                }
+              ],
+              "stretch": "Make /readyz fail when the warm-up prediction disagrees with the artefact's reference prediction"
+            }
+          }
+        ]
+      },
+      {
+        "id": "day2",
+        "kind": "day",
+        "n": 2,
+        "number": 2,
+        "label": "Day 2",
+        "title": "Containers and a cluster",
+        "subtitle": "An image that is small, scanned and configured from outside, running on a local cluster",
+        "shape": "4 sessions · 4 labs",
+        "deck": "../slides/day2.html",
+        "md": "../slides/day2.md",
+        "url": "https://sdaiaacademy.github.io/ae-205/slides/day2.html",
+        "sessions": [
+          {
+            "n": 1,
+            "label": "Session 1",
+            "title": "Images that are small and reproducible",
+            "summary": "Layers and the build cache, multi-stage builds from the lock file, slim bases, a non-root user and what to leave out",
+            "outcomes": [
+              "Read a container file and predict which layers a change rebuilds",
+              "Write a multi-stage container file that installs from the lock file",
+              "Measure image size and build time and explain the difference"
+            ],
+            "lo": [
+              "LO4"
+            ],
+            "minutes": 50,
+            "lab": {
+              "id": "2.1",
+              "title": "A multi-stage container file",
+              "summary": "Write a multi-stage container file and compare its size and build time with a naive one.",
+              "minutes": 25,
+              "href": "../labs/D2_1_multi_stage_image.html",
+              "steps": [
+                {
+                  "text": "Build the naive image; record size and time",
+                  "minutes": 5
+                },
+                {
+                  "text": "Write the multi-stage file without AI help",
+                  "minutes": 10
+                },
+                {
+                  "text": "Build it; record size, time and a rebuild after a code change",
+                  "minutes": 6
+                },
+                {
+                  "text": "Check",
+                  "minutes": 4
+                }
+              ],
+              "stretch": "Pin the base image by digest and rebuild twice: do the two images have the same id?"
+            }
+          },
+          {
+            "n": 2,
+            "label": "Session 2",
+            "title": "Scanning and configuration",
+            "summary": "What a scanner reads and reports, severities and fixed versions, secrets in image layers, and configuration from the environment",
+            "outcomes": [
+              "Read a vulnerability report and pick the finding to fix first",
+              "Fix a finding by moving to a fixed version and scan again",
+              "Move a secret out of an image into configuration the runtime supplies"
+            ],
+            "lo": [
+              "LO4"
+            ],
+            "minutes": 50,
+            "lab": {
+              "id": "2.2",
+              "title": "Scan, fix, configure",
+              "summary": "Scan a supplied image, fix one critical finding and move secrets out of the image into configuration.",
+              "minutes": 25,
+              "href": "../labs/D2_2_scan_and_config.html",
+              "steps": [
+                {
+                  "text": "Scan the supplied image and read the report",
+                  "minutes": 6
+                },
+                {
+                  "text": "Fix the critical finding and scan again",
+                  "minutes": 7
+                },
+                {
+                  "text": "Find the key in the image history",
+                  "minutes": 4
+                },
+                {
+                  "text": "Read the key from configuration instead",
+                  "minutes": 5
+                },
+                {
+                  "text": "Check",
+                  "minutes": 3
+                }
+              ],
+              "stretch": "Scan the multi-stage image of lab 2.1 and compare the counts by severity"
+            }
+          },
+          {
+            "n": 3,
+            "label": "Session 3",
+            "title": "Running on a local cluster",
+            "summary": "Deployments, services and probes, requests and limits, rolling updates, and where a service may run under data rules",
+            "outcomes": [
+              "Deploy a service with probes and resource limits to a single-node cluster",
+              "Diagnose a pod that does not become ready from its events",
+              "Decide where each service may run from its data classification"
+            ],
+            "lo": [
+              "LO4"
+            ],
+            "minutes": 50,
+            "lab": {
+              "id": "2.3",
+              "title": "Deploy to a local cluster",
+              "summary": "Deploy the supplied service image to a single-node cluster with probes and resource limits, and decide where each service may run.",
+              "minutes": 25,
+              "href": "../labs/D2_3_local_cluster.html",
+              "steps": [
+                {
+                  "text": "Create the cluster and load the image",
+                  "minutes": 5
+                },
+                {
+                  "text": "Apply the supplied manifest; read why it fails",
+                  "minutes": 5
+                },
+                {
+                  "text": "Add probes, limits and a pinned image",
+                  "minutes": 7
+                },
+                {
+                  "text": "Fill the placement table for three services",
+                  "minutes": 5
+                },
+                {
+                  "text": "Check",
+                  "minutes": 3
+                }
+              ],
+              "stretch": "Change the image tag and watch a rolling update replace the pods one at a time"
+            }
+          },
+          {
+            "n": 4,
+            "label": "Session 4",
+            "title": "Serving the embedding model",
+            "summary": "An embedding model as a service: vectors and an index in memory, start-up time, a startup probe and a deployment of its own",
+            "outcomes": [
+              "Serve a nearest-neighbour search behind a versioned endpoint",
+              "Measure memory and time to ready for two models",
+              "Decide whether two models share a deployment"
+            ],
+            "lo": [
+              "LO3"
+            ],
+            "minutes": 50,
+            "lab": {
+              "id": "2.4",
+              "title": "The similar-claims endpoint",
+              "summary": "Add the similar-claims endpoint and compare its memory use and start-up time with the classifier.",
+              "minutes": 25,
+              "href": "../labs/D2_4_similar_claims.html",
+              "steps": [
+                {
+                  "text": "Read the Shabih artefact and its index",
+                  "minutes": 4
+                },
+                {
+                  "text": "Add /v1/similar with a contract and no personal fields",
+                  "minutes": 9
+                },
+                {
+                  "text": "Measure memory and time to ready for both models",
+                  "minutes": 7
+                },
+                {
+                  "text": "Check",
+                  "minutes": 5
+                }
+              ],
+              "stretch": "Halve the index with float16 vectors and measure what it saves and what it changes in the results"
+            }
+          }
+        ]
+      },
+      {
+        "id": "day3",
+        "kind": "day",
+        "n": 3,
+        "number": 3,
+        "label": "Day 3",
+        "title": "Observe and size",
+        "subtitle": "Metrics, logs and traces that answer questions, then the load the service can carry and what it costs",
+        "shape": "4 sessions · 4 labs",
+        "deck": "../slides/day3.html",
+        "md": "../slides/day3.md",
+        "url": "https://sdaiaacademy.github.io/ae-205/slides/day3.html",
+        "sessions": [
+          {
+            "n": 1,
+            "label": "Session 1",
+            "title": "Metrics that matter",
+            "summary": "Rate, errors and duration, histograms and their buckets, percentiles, the distribution of predictions and dashboards defined as code",
+            "outcomes": [
+              "Instrument a service with request, error and latency metrics",
+              "Compute the 50th, 95th and 99th percentiles from histogram buckets",
+              "Define a dashboard as code with latency, errors and predictions"
+            ],
+            "lo": [
+              "LO5"
+            ],
+            "minutes": 50,
+            "lab": {
+              "id": "3.1",
+              "title": "Rate, errors and latency",
+              "summary": "Expose request rate, error rate and latency histograms and graph the 50th, 95th and 99th percentiles.",
+              "minutes": 25,
+              "href": "../labs/D3_1_metrics.html",
+              "steps": [
+                {
+                  "text": "Add the counters and the latency histogram",
+                  "minutes": 8
+                },
+                {
+                  "text": "Add the prediction distribution",
+                  "minutes": 4
+                },
+                {
+                  "text": "Drive traffic and compute the percentiles",
+                  "minutes": 7
+                },
+                {
+                  "text": "Read the dashboard file; check",
+                  "minutes": 6
+                }
+              ],
+              "stretch": "Move the histogram buckets and see how far the estimated 95th percentile moves"
+            }
+          },
+          {
+            "n": 2,
+            "label": "Session 2",
+            "title": "Logs and traces",
+            "summary": "Structured logs with a request id, personal fields redacted at the edge, and traces that show where one slow request spent its time",
+            "outcomes": [
+              "Write one structured log line per request with a request id",
+              "Redact personal fields before they reach a log or a trace, and test it",
+              "Follow one slow request through its spans to the slow step"
+            ],
+            "lo": [
+              "LO5"
+            ],
+            "minutes": 50,
+            "lab": {
+              "id": "3.2",
+              "title": "Logs, redaction and a trace",
+              "summary": "Add structured logs with a request id, redact personal fields and follow one slow request through a trace.",
+              "minutes": 25,
+              "href": "../labs/D3_2_logs_traces.html",
+              "steps": [
+                {
+                  "text": "Find the personal fields in the current logs",
+                  "minutes": 4
+                },
+                {
+                  "text": "Log JSON with a request id; redact at the edge",
+                  "minutes": 9
+                },
+                {
+                  "text": "Add spans; find the slowest request and its slow span",
+                  "minutes": 8
+                },
+                {
+                  "text": "Check",
+                  "minutes": 4
+                }
+              ],
+              "stretch": "Pass the request id to the policy lookup as a header and see it in the lookup's own log"
+            }
+          },
+          {
+            "n": 3,
+            "label": "Session 3",
+            "title": "Load testing",
+            "summary": "Open and closed load, warm-up, steady rates, percentiles under load and the knee where latency breaks the objective",
+            "outcomes": [
+              "Write a load test that sends realistic requests at a fixed rate",
+              "Run it at three rates and read percentiles, errors and throughput",
+              "Locate the rate at which the 95th percentile breaks the objective"
+            ],
+            "lo": [
+              "LO6"
+            ],
+            "minutes": 50,
+            "lab": {
+              "id": "3.3",
+              "title": "Three rates against the objective",
+              "summary": "Run a load test at three request rates and find where latency breaks the objective.",
+              "minutes": 25,
+              "href": "../labs/D3_3_load_test.html",
+              "steps": [
+                {
+                  "text": "Read the objective and the locust file",
+                  "minutes": 4
+                },
+                {
+                  "text": "Make the requests realistic",
+                  "minutes": 5
+                },
+                {
+                  "text": "Run three rates with a warm-up",
+                  "minutes": 10
+                },
+                {
+                  "text": "Report where the objective breaks; check",
+                  "minutes": 6
+                }
+              ],
+              "stretch": "Run the same rates with k6 and compare the two tools' numbers"
+            }
+          },
+          {
+            "n": 4,
+            "label": "Session 4",
+            "title": "Sizing and cost",
+            "summary": "Workers and replicas, concurrency on a processor, headroom, processor against graphics-processor serving and the cost of 1,000 predictions",
+            "outcomes": [
+              "Measure the rate one worker carries within the objective",
+              "Choose workers and replicas for a target rate with headroom",
+              "Compute the cost per 1,000 predictions of a configuration"
+            ],
+            "lo": [
+              "LO6"
+            ],
+            "minutes": 50,
+            "lab": {
+              "id": "3.4",
+              "title": "Workers, replicas and cost",
+              "summary": "Tune workers and replicas to meet the latency objective and compute cost per 1,000 predictions.",
+              "minutes": 25,
+              "href": "../labs/D3_4_sizing_cost.html",
+              "steps": [
+                {
+                  "text": "Measure one, two and four workers at the target rate",
+                  "minutes": 10
+                },
+                {
+                  "text": "Choose workers and replicas with headroom",
+                  "minutes": 6
+                },
+                {
+                  "text": "Compute cost per 1,000 predictions",
+                  "minutes": 5
+                },
+                {
+                  "text": "Check",
+                  "minutes": 4
+                }
+              ],
+              "stretch": "Price the same load on the cheapest configuration that breaks the objective and say what Munira would lose"
+            }
+          }
+        ]
+      },
+      {
+        "id": "day4",
+        "kind": "day",
+        "n": 4,
+        "number": 4,
+        "label": "Day 4",
+        "title": "Release and watch",
+        "subtitle": "Release a new version on evidence, roll back a bad one, watch the inputs drift and hand over to the on-call engineer",
+        "shape": "4 sessions · 4 labs",
+        "deck": "../slides/day4.html",
+        "md": "../slides/day4.md",
+        "url": "https://sdaiaacademy.github.io/ae-205/slides/day4.html",
+        "sessions": [
+          {
+            "n": 1,
+            "label": "Session 1",
+            "title": "Rolling, canary and shadow releases",
+            "summary": "Blue-green, rolling, canary and shadow releases, and comparing a canary with the current version on the same metrics",
+            "outcomes": [
+              "Choose a release strategy for a change and its risk",
+              "Send a fixed share of traffic to a new version",
+              "Compare two versions on errors, latency and predictions"
+            ],
+            "lo": [
+              "LO7"
+            ],
+            "minutes": 50,
+            "lab": {
+              "id": "4.1",
+              "title": "A 10% canary",
+              "summary": "Send 10% of traffic to a new version and compare its metrics with the current one.",
+              "minutes": 25,
+              "href": "../labs/D4_1_canary.html",
+              "steps": [
+                {
+                  "text": "Start both versions and the router",
+                  "minutes": 5
+                },
+                {
+                  "text": "Replay claims with 10% to the canary",
+                  "minutes": 7
+                },
+                {
+                  "text": "Compare errors, latency and predictions",
+                  "minutes": 8
+                },
+                {
+                  "text": "Write the release log entry; check",
+                  "minutes": 5
+                }
+              ],
+              "stretch": "Run 1.1.0 in shadow instead: copy every request to it, return only 1.0.0's answer, and compare"
+            }
+          },
+          {
+            "n": 2,
+            "label": "Session 2",
+            "title": "Rollback on evidence",
+            "summary": "Rollback criteria written before the release, who decides, rolling back first and diagnosing second",
+            "outcomes": [
+              "Apply written rollback criteria to a canary's metrics",
+              "Roll back within a time limit and record the evidence",
+              "Name the person accountable for the decision"
+            ],
+            "lo": [
+              "LO7"
+            ],
+            "minutes": 50,
+            "lab": {
+              "id": "4.2",
+              "title": "Roll back a faulty version",
+              "summary": "Trigger the rollback criteria with a seeded faulty version and roll back within five minutes.",
+              "minutes": 25,
+              "href": "../labs/D4_2_rollback.html",
+              "steps": [
+                {
+                  "text": "Read the criteria; start the canary of 1.2.0",
+                  "minutes": 5
+                },
+                {
+                  "text": "Watch until a criterion fires",
+                  "minutes": 6
+                },
+                {
+                  "text": "Roll back and time it",
+                  "minutes": 5
+                },
+                {
+                  "text": "Find the cause; write the release log",
+                  "minutes": 6
+                },
+                {
+                  "text": "Check",
+                  "minutes": 3
+                }
+              ],
+              "stretch": "Do the same rollback on the cluster with kubectl rollout undo and compare the time"
+            }
+          },
+          {
+            "n": 3,
+            "label": "Session 3",
+            "title": "Drift in replayed traffic",
+            "summary": "Data drift and concept drift, distribution tests and population stability, delayed labels and when drift should start a retraining",
+            "outcomes": [
+              "Compute a drift statistic per feature against the training data",
+              "Name the shifted features and rule out a noisy one",
+              "Say what delayed labels allow you to conclude, and when"
+            ],
+            "lo": [
+              "LO7"
+            ],
+            "minutes": 50,
+            "lab": {
+              "id": "4.3",
+              "title": "Drift in four weeks",
+              "summary": "Replay four weeks of claims, compute a drift statistic per feature and name the shifted ones.",
+              "minutes": 25,
+              "href": "../labs/D4_3_drift.html",
+              "steps": [
+                {
+                  "text": "Replay the four weeks through the service",
+                  "minutes": 5
+                },
+                {
+                  "text": "Compute population stability and a KS test per feature",
+                  "minutes": 9
+                },
+                {
+                  "text": "Name the shifted features; check the labels you have",
+                  "minutes": 7
+                },
+                {
+                  "text": "Write the drift report; check",
+                  "minutes": 4
+                }
+              ],
+              "stretch": "Recompute the statistics with Evidently and compare its verdicts with yours"
+            }
+          },
+          {
+            "n": 4,
+            "label": "Session 4",
+            "title": "Alerts and a runbook",
+            "summary": "Alerts on symptoms the caller feels, durations that stop flapping, a runbook the on-call engineer can follow and the person who decides a rollback",
+            "outcomes": [
+              "Write an alert rule on error ratio and one on latency",
+              "Test both rules against a recorded error spike",
+              "Write a one-page runbook with the accountable person"
+            ],
+            "lo": [
+              "LO5"
+            ],
+            "minutes": 50,
+            "lab": {
+              "id": "4.4",
+              "title": "Two alerts and a runbook",
+              "summary": "Write two alert rules and a one-page runbook for the on-call engineer, then choose the capstone model.",
+              "minutes": 25,
+              "href": "../labs/D4_4_alerts_runbook.html",
+              "steps": [
+                {
+                  "text": "Write the two rules without AI help",
+                  "minutes": 8
+                },
+                {
+                  "text": "Test them on the recorded spike",
+                  "minutes": 6
+                },
+                {
+                  "text": "Write the one-page runbook",
+                  "minutes": 8
+                },
+                {
+                  "text": "Choose the capstone model; check",
+                  "minutes": 3
+                }
+              ],
+              "stretch": "Add a burn-rate alert on the error objective over two windows and test it on the same recording"
+            }
+          }
+        ]
+      },
+      {
+        "id": "capstone",
+        "kind": "capstone",
+        "n": 5,
+        "number": null,
+        "label": "Capstone",
+        "title": "Capstone: a monitored service and its defence",
+        "subtitle": "Eight minutes to show the service, four minutes of questions, and one fault injected by the assessor",
+        "shape": "",
+        "deck": "../slides/capstone.html",
+        "md": "../slides/capstone.md",
+        "url": "https://sdaiaacademy.github.io/ae-205/slides/capstone.html",
+        "sessions": []
+      }
+    ],
+    "capstone": {
+      "summary": "A model of the participant's choice taken to a monitored service, submitted as a public repository with container file, deployment manifests and dashboards as code, and a README reporting load-test results against a latency objective, a recorded canary release and rollback and a drift check, followed by an eight-minute defence and four minutes of questions",
+      "submission": "A public GitHub repository link: the service with its container file, deployment manifests, dashboard and alert rules as code, and a README that reports the load-test results against a stated latency objective, the recorded canary release and rollback, and a drift check, with the command that produced each number.",
+      "talk_minutes": 8,
+      "qa_minutes": 4,
+      "rubric": [
+        {
+          "criterion": "Packaging and API",
+          "weight": 20
+        },
+        {
+          "criterion": "Container and deployment",
+          "weight": 20
+        },
+        {
+          "criterion": "Observability",
+          "weight": 20
+        },
+        {
+          "criterion": "Sizing against the objective",
+          "weight": 15
+        },
+        {
+          "criterion": "Release, rollback and drift",
+          "weight": 25
+        }
+      ]
+    },
+    "labs": {
+      "kind": "pages",
+      "base": "labs/"
+    },
+    "tools": [
+      {
+        "slot": "Container runtime and image builder",
+        "examples": [
+          "Podman",
+          "Docker"
+        ]
+      },
+      {
+        "slot": "Local single-node cluster",
+        "examples": [
+          "kind",
+          "k3d",
+          "minikube"
+        ]
+      },
+      {
+        "slot": "Model registry and tracking",
+        "examples": [
+          "MLflow",
+          "a Git repository with tagged artefacts"
+        ]
+      },
+      {
+        "slot": "Serving framework",
+        "examples": [
+          "FastAPI",
+          "Ray Serve",
+          "KServe"
+        ]
+      },
+      {
+        "slot": "Metrics, dashboards and alerts",
+        "examples": [
+          "Prometheus with Grafana",
+          "OpenTelemetry Collector with any compatible back end"
+        ]
+      },
+      {
+        "slot": "Tracing and structured logging",
+        "examples": [
+          "OpenTelemetry",
+          "structlog"
+        ]
+      },
+      {
+        "slot": "Image vulnerability scanning",
+        "examples": [
+          "Trivy",
+          "Grype"
+        ]
+      },
+      {
+        "slot": "Load testing",
+        "examples": [
+          "Locust",
+          "k6"
+        ]
+      },
+      {
+        "slot": "Drift statistics",
+        "examples": [
+          "SciPy",
+          "Evidently"
+        ]
+      }
+    ],
+    "sources": [
+      {
+        "group": "Containers and clusters",
+        "items": [
+          {
+            "title": "Docker Docs: Multi-stage builds",
+            "url": "https://docs.docker.com/build/building/multi-stage/"
+          },
+          {
+            "title": "Docker Docs: Building best practices",
+            "url": "https://docs.docker.com/build/building/best-practices/"
+          },
+          {
+            "title": "uv: Using uv in Docker",
+            "url": "https://docs.astral.sh/uv/guides/integration/docker/"
+          },
+          {
+            "title": "uv: Locking and syncing",
+            "url": "https://docs.astral.sh/uv/concepts/projects/sync/"
+          },
+          {
+            "title": "Podman: Getting started",
+            "url": "https://podman.io/docs"
+          },
+          {
+            "title": "Kubernetes: Liveness, readiness and startup probes",
+            "url": "https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/"
+          },
+          {
+            "title": "Kubernetes: Configure liveness, readiness and startup probes",
+            "url": "https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/"
+          },
+          {
+            "title": "Kubernetes: Resource management for pods and containers",
+            "url": "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/"
+          },
+          {
+            "title": "Kubernetes: Deployments",
+            "url": "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/"
+          },
+          {
+            "title": "Kubernetes: Horizontal Pod Autoscaling",
+            "url": "https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/"
+          },
+          {
+            "title": "Kubernetes: Secrets",
+            "url": "https://kubernetes.io/docs/concepts/configuration/secret/"
+          },
+          {
+            "title": "kind: Quick start",
+            "url": "https://kind.sigs.k8s.io/docs/user/quick-start/"
+          },
+          {
+            "title": "k3d (repository)",
+            "url": "https://github.com/k3d-io/k3d"
+          },
+          {
+            "title": "minikube start",
+            "url": "https://minikube.sigs.k8s.io/docs/start/"
+          },
+          {
+            "title": "The Twelve-Factor App: Config",
+            "url": "https://12factor.net/config"
+          }
+        ]
+      },
+      {
+        "group": "Scanning",
+        "items": [
+          {
+            "title": "Trivy documentation",
+            "url": "https://trivy.dev/latest/docs/"
+          },
+          {
+            "title": "Grype (repository)",
+            "url": "https://github.com/anchore/grype"
+          },
+          {
+            "title": "pip-audit (repository)",
+            "url": "https://github.com/pypa/pip-audit"
+          },
+          {
+            "title": "OSV: Open Source Vulnerabilities",
+            "url": "https://osv.dev/"
+          }
+        ]
+      },
+      {
+        "group": "Artefacts, registries and serving",
+        "items": [
+          {
+            "title": "Python: pickle (the security warning)",
+            "url": "https://docs.python.org/3/library/pickle.html"
+          },
+          {
+            "title": "skops: Secure persistence",
+            "url": "https://skops.readthedocs.io/en/stable/persistence.html"
+          },
+          {
+            "title": "MLflow: Model registry",
+            "url": "https://mlflow.org/docs/latest/ml/model-registry/"
+          },
+          {
+            "title": "MLflow: Model signatures and input examples",
+            "url": "https://mlflow.org/docs/latest/ml/model/signatures/"
+          },
+          {
+            "title": "FastAPI: Handling errors",
+            "url": "https://fastapi.tiangolo.com/tutorial/handling-errors/"
+          },
+          {
+            "title": "FastAPI: Testing dependencies with overrides",
+            "url": "https://fastapi.tiangolo.com/advanced/testing-dependencies/"
+          },
+          {
+            "title": "FastAPI in containers",
+            "url": "https://fastapi.tiangolo.com/deployment/docker/"
+          },
+          {
+            "title": "Uvicorn: Deployment",
+            "url": "https://uvicorn.dev/deployment/"
+          },
+          {
+            "title": "Pydantic: Models",
+            "url": "https://docs.pydantic.dev/latest/concepts/models/"
+          },
+          {
+            "title": "RFC 9457: Problem Details for HTTP APIs",
+            "url": "https://www.rfc-editor.org/rfc/rfc9457.html"
+          },
+          {
+            "title": "Ray Serve",
+            "url": "https://docs.ray.io/en/latest/serve/index.html"
+          },
+          {
+            "title": "KServe",
+            "url": "https://kserve.github.io/website/"
+          }
+        ]
+      },
+      {
+        "group": "Observability, load and releases",
+        "items": [
+          {
+            "title": "Prometheus: Histograms and summaries",
+            "url": "https://prometheus.io/docs/practices/histograms/"
+          },
+          {
+            "title": "Prometheus: Query functions",
+            "url": "https://prometheus.io/docs/prometheus/latest/querying/functions/"
+          },
+          {
+            "title": "Prometheus: Alerting rules",
+            "url": "https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/"
+          },
+          {
+            "title": "Prometheus Python client",
+            "url": "https://prometheus.github.io/client_python/"
+          },
+          {
+            "title": "Grafana: Dashboard JSON model",
+            "url": "https://grafana.com/docs/grafana/latest/dashboards/build-dashboards/view-dashboard-json-model/"
+          },
+          {
+            "title": "OpenTelemetry: Python",
+            "url": "https://opentelemetry.io/docs/languages/python/"
+          },
+          {
+            "title": "OpenTelemetry: Traces",
+            "url": "https://opentelemetry.io/docs/concepts/signals/traces/"
+          },
+          {
+            "title": "structlog documentation",
+            "url": "https://www.structlog.org/en/stable/"
+          },
+          {
+            "title": "Locust documentation",
+            "url": "https://docs.locust.io/en/stable/"
+          },
+          {
+            "title": "Grafana k6 documentation",
+            "url": "https://grafana.com/docs/k6/latest/"
+          },
+          {
+            "title": "Google SRE book: Monitoring distributed systems",
+            "url": "https://sre.google/sre-book/monitoring-distributed-systems/"
+          },
+          {
+            "title": "Google SRE workbook: Canarying releases",
+            "url": "https://sre.google/workbook/canarying-releases/"
+          },
+          {
+            "title": "Google SRE workbook: Alerting on SLOs",
+            "url": "https://sre.google/workbook/alerting-on-slos/"
+          },
+          {
+            "title": "SciPy: ks_2samp",
+            "url": "https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ks_2samp.html"
+          },
+          {
+            "title": "Evidently documentation",
+            "url": "https://docs.evidentlyai.com/"
+          }
+        ]
+      },
+      {
+        "group": "National references",
+        "items": [
+          {
+            "title": "Personal Data Protection Law (SDAIA)",
+            "url": "https://sdaia.gov.sa/en/SDAIA/about/Documents/PersonalDataProtectionLaw.pdf"
+          },
+          {
+            "title": "Implementing Regulation of the Personal Data Protection Law (SDAIA)",
+            "url": "https://sdaia.gov.sa/en/SDAIA/about/Documents/ImplementingRegulationPersonalDataProtectionLaw.pdf"
+          },
+          {
+            "title": "Regulation on Personal Data Transfer outside the Kingdom (SDAIA)",
+            "url": "https://sdaia.gov.sa/Documents/RegulationonPersonalDataEN.pdf"
+          },
+          {
+            "title": "Data Classification Policy (NDMO, SDAIA)",
+            "url": "https://sdaia.gov.sa/en/SDAIA/about/Documents/DataClassificationPolicy.pdf"
+          },
+          {
+            "title": "AI Ethics Principles (SDAIA)",
+            "url": "https://sdaia.gov.sa/en/SDAIA/about/Documents/ai-principles.pdf"
+          },
+          {
+            "title": "National Cybersecurity Authority: Cloud Cybersecurity Controls",
+            "url": "https://nca.gov.sa/en/regulatory-documents/controls-list/ccc/"
+          }
+        ]
+      }
+    ]
+  }
+}

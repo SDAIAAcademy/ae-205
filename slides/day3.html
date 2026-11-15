@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-ax="deck" data-track="ai-engineering">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Day 3 · Observe and size · Deploying AI Services: Containers, Serving and Monitoring</title>
+<meta name="generator" content="SDAIA Academy engine 1.0.0">
+<link rel="icon" href="../_engine/icon.svg">
+<link rel="alternate" type="text/markdown" href="day3.md">
+<link rel="describedby" href="../llms.txt">
+<link rel="stylesheet" href="../_engine/academy.css">
+</head>
+<body>
+<div class="deck" data-course="Deploying AI Services: Containers, Serving and Monitoring" data-track="ai-engineering" data-day="Day 3">
+<section class="slide title" id="title" data-auto="title" data-label="Welcome" data-n="1">
+  <div class="kicker">SDAIA Academy · Deploying AI Services: Containers, Serving and Monitoring</div>
+  <h1>Observe and size</h1>
+  <p class="lead mt">Day 3: Metrics, logs and traces that answer questions, then the load the service can carry and what it costs</p>
+  <div class="meta"><span class="track">AI Engineering Track</span><span>4 teaching days + capstone day</span><span>4 sessions · 4 labs</span><span>AE-205</span></div>
+  <aside class="notes"><p>Welcome to Day 3. Ask the room: how did you last find out that a service of yours was slow, from a dashboard or from a user? Today Farz gets the instruments that answer before a user does, then a load test and a sizing decision against Munira's objective.</p><p>Every lab today runs with uv on the laptop; no container runtime is needed. Ask participants to close heavy programs before sessions 3 and 4: load tests measure the laptop as much as the service.</p></aside>
+</section>
+
+<section class="slide" id="agenda" data-auto="agenda" data-label="Agenda" data-n="2">
+  <div class="kicker">Today</div>
+  <h2>Observe and size</h2>
+  <div class="agenda"><div class="item"><div><b>Session 1 · Metrics that matter</b><small>Rate, errors and duration, histograms and their buckets, percentiles, the distribution of predictions and dashboards defined as code</small></div></div><div class="item"><div><b>Session 2 · Logs and traces</b><small>Structured logs with a request id, personal fields redacted at the edge, and traces that show where one slow request spent its time</small></div></div><div class="item"><div><b>Session 3 · Load testing</b><small>Open and closed load, warm-up, steady rates, percentiles under load and the knee where latency breaks the objective</small></div></div><div class="item"><div><b>Session 4 · Sizing and cost</b><small>Workers and replicas, concurrency on a processor, headroom, processor against graphics-processor serving and the cost of 1,000 predictions</small></div></div></div>
+</section>
+
+<!-- Session 1 -->
+
+<section class="slide section" id="s1" data-auto="section" data-session="1" data-n="3">
+  <div class="kicker">Session 1</div>
+  <h1>Metrics that matter</h1>
+  <ul class="bullets outcomes"><li>Instrument a service with request, error and latency metrics</li><li>Compute the 50th, 95th and 99th percentiles from histogram buckets</li><li>Define a dashboard as code with latency, errors and predictions</li></ul>
+  <div class="sess-no">01</div>
+</section>
+
+<section class="slide" id="three-questions" data-lo="LO5" data-n="4" data-session="1">
+  <div class="kicker">What to measure</div>
+  <h2>Rate, errors and duration describe what every caller felt</h2>
+  <div class="cols cols-3">
+    <div class="card c-teal"><h4>Rate</h4><p class="small mb0">Requests a second, by route. The claims system's traffic, as Farz saw it.</p></div>
+    <div class="card c-coral"><h4>Errors</h4><p class="small mb0">The share of requests that failed, by status. A 5xx is Farz's fault; a 4xx is the caller's.</p></div>
+    <div class="card c-navy"><h4>Duration</h4><p class="small mb0">How long requests took, as a distribution: percentiles, not an average.</p></div>
+  </div>
+  <div class="callout tip mt"><b>A model adds a fourth.</b> What it predicted: the share of each label, by version.</div>
+  <aside class="notes"><p>This is the RED method (rate, errors, duration), a reduction of Google's four golden signals, which add saturation. Saturation comes in session 4 with sizing. The fourth metric is the one an ordinary web service does not have: a model can answer fast, with status 200, and be wrong for everyone.</p></aside>
+</section>
+
+<section class="slide" id="metric-types" data-lo="LO5" data-n="5" data-session="1">
+  <div class="kicker">Prometheus metric types</div>
+  <h2>Counters only go up; a histogram counts observations into buckets</h2>
+  <table class="t small">
+    <tr><th>Type</th><th>What it holds</th><th>Farz uses it for</th></tr>
+    <tr><td>Counter</td><td>a total that only increases; <code>rate()</code> turns it into a speed</td><td><code>rifd_requests_total</code>, <code>rifd_predictions_total</code></td></tr>
+    <tr><td>Gauge</td><td>a value that goes up and down</td><td><code>rifd_model_ready</code></td></tr>
+    <tr class="hl"><td>Histogram</td><td>a count per bucket boundary, plus a sum and a count</td><td><code>rifd_request_duration_seconds</code></td></tr>
+    <tr><td>Summary</td><td>percentiles computed in the process</td><td>nothing: they cannot be added across replicas</td></tr>
+  </table>
+  <aside class="notes"><p>The Prometheus client libraries define these four. Ask why a counter is better than a gauge of "requests in the last minute": a counter survives a missed scrape, because the next one still shows the total, and <code>rate()</code> handles restarts that reset it to zero.</p></aside>
+</section>
+
+<section class="slide" id="labels-cardinality" data-lo="LO5" data-n="6" data-session="1">
+  <div class="kicker">Labels</div>
+  <h2>Every distinct set of label values is a new time series</h2>
+  <div class="cols cols-2">
+    <pre class="code s" data-file="src/rifd/metrics.py"><code class="language-python"><span class="hljs-variable language_">self</span>.predictions = Counter(
+    <span class="hljs-string">&quot;rifd_predictions&quot;</span>,
+    <span class="hljs-string">&quot;Predictions made, by model version and label&quot;</span>,
+    [<span class="hljs-string">&quot;model&quot;</span>, <span class="hljs-string">&quot;version&quot;</span>, <span class="hljs-string">&quot;label&quot;</span>])</code></pre>
+    <ul class="bullets small">
+      <li>2 versions × 3 labels: <b>6 series</b></li>
+      <li>Add <code>claim_id</code>: a series per claim, and the monitoring system stores every one</li>
+      <li>A label value is also data that leaves the service: never a member field</li>
+    </ul>
+  </div>
+  <aside class="notes"><p>High cardinality is the commonest way to break a Prometheus server. The second point ties back to Day 2's placement table: the dashboards may run outside the Kingdom only because their labels carry no personal data. A claim id is not personal by itself, but it links to a member in the claims system.</p></aside>
+</section>
+
+<section class="slide" id="histogram-quantile" data-lo="LO5" data-n="7" data-session="1">
+  <div class="kicker">Percentiles from buckets</div>
+  <h2>histogram_quantile finds the bucket and draws a straight line inside it</h2>
+  <pre class="code s" data-file="PromQL"><code class="language-text">histogram_quantile(0.95,
+  sum by (le) (rate(rifd_request_duration_seconds_bucket{route=&quot;/v1/triage&quot;}[1m])))</code></pre>
+  <div class="cols cols-2 mt">
+    <div class="callout tip small"><b>Sum, then estimate.</b> Bucket rates add up across replicas; the 95th percentile of the sum is the 95th percentile of the service.</div>
+    <div class="callout warn small"><b>Only as precise as the buckets.</b> Farz's boundaries are 0.1, 0.15 and 0.2 around the objective; with only 0.1 and 0.5 the estimate could be anywhere in between.</div>
+  </div>
+  <aside class="notes"><p>The function assumes observations are spread evenly inside a bucket and interpolates. That is why the course's buckets are dense around 150 ms, where Munira's objective is judged: <code>(0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.15, 0.2, 0.3, 0.5, 1, 2.5)</code>. The stretch of lab 3.1 moves them and watches the estimate move.</p></aside>
+</section>
+
+<section class="slide" id="prediction-panel" data-lo="LO5" data-n="8" data-session="1">
+  <div class="kicker">The model's own signal</div>
+  <h2>The share of each label is the first sign that something changed</h2>
+  <div class="cols cols-3">
+    <div class="stat center"><div class="big">36%</div><div class="lbl">fast track in the training claims</div></div>
+    <div class="stat center"><div class="big">47%</div><div class="lbl">standard</div></div>
+    <div class="stat center"><div class="big">16%</div><div class="lbl">investigate</div></div>
+  </div>
+  <p class="small mt">The panel <code>sum by (version, label) (rate(rifd_predictions_total[1m]))</code> shows these shares live, per version. A canary whose shares differ by more than 10 points breaks one of Munira's rollback criteria on Day 4.</p>
+  <aside class="notes"><p>Shares of the labels in the 50,000 generated claims (fast track 36.6%, standard 47.2%, investigate 16.3%). Farz's own predictions on week 1 were 35% fast track, 45% standard and 20% investigate: a model does not reproduce the shares exactly, so the dashboard compares the model with itself over time and across versions.</p></aside>
+</section>
+
+<section class="slide" id="dashboard-as-code" data-lo="LO5" data-n="9" data-session="1">
+  <div class="kicker">Dashboards as code</div>
+  <h2>The dashboard is a file in the repository, reviewed like code</h2>
+  <div class="cols cols-2">
+    <ul class="bullets small">
+      <li><code>monitoring/dashboard.json</code>: four panels, each a PromQL query</li>
+      <li>Grafana loads it at start from <code>monitoring/grafana/</code> (provisioning)</li>
+      <li>The lab's check reads the file: a test of the dashboard</li>
+      <li>A change to a metric name breaks a test, not the on-call engineer's night</li>
+    </ul>
+    <div class="card c-teal"><h4>Four panels</h4><p class="small mb0">Requests a second by status; error ratio; p50, p95 and p99 of triage; predictions a second by version and label.</p></div>
+  </div>
+  <aside class="notes"><p>With a container runtime, <code>docker compose -f monitoring/compose.yaml up</code> starts Prometheus 3.16 and Grafana 13.2 with this dashboard; the course's own run could not start containers, so the lab uses <code>promlite</code>, which reads the same queries. Ask: who reviews a dashboard change in your team today?</p></aside>
+</section>
+
+<section class="slide" id="check-metrics" data-lo="LO5" data-n="10" data-session="1">
+  <div class="kicker">Checkpoint</div>
+  <h2>How do you get the service's 95th percentile?</h2>
+  <div class="quiz" data-type="single" data-lo="LO5" data-id="check-metrics-q1">
+    <p class="lead">Farz runs four replicas. Each exposes its latency histogram. The dashboard must show the 95th percentile of all triage requests in the last minute. Which query is right?</p>
+    <div class="opts">
+      <div class="opt" data-why="Averaging four percentiles is not the percentile of the whole: a slow replica's tail is diluted" data-k="A">avg of histogram_quantile(0.95, …) computed for each replica</div>
+      <div class="opt" data-why="The largest of four percentiles overstates the service's percentile" data-k="B">max of histogram_quantile(0.95, …) over the replicas</div>
+      <div class="opt" data-why="The average of the observations hides the tail the objective is about" data-k="C">rate of the duration sum divided by the rate of the count</div>
+      <div class="opt" data-ok data-k="D">histogram_quantile(0.95, sum by (le) (rate(…_bucket[1m])))</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> Bucket counts add up across replicas, so sum the rates by boundary first and estimate the percentile once.</div>
+  </div>
+  <aside class="notes"><p>Answer: D. Option C is the mean latency, a useful number but not the objective. If many choose A, draw two replicas, one slow and one fast, and show that the average of their 95th percentiles is not where 95% of all requests fall.</p></aside>
+</section>
+
+<section class="slide lab top" id="lab-3-1" data-auto="lab" data-lab="3.1" data-label="Lab 3.1" data-n="11" data-session="1">
+  <div class="cols cols-2 mid"><div><div class="lab-tag">Lab 3.1 · 25 min</div><h2>Rate, errors and latency</h2><p class="lead small">Expose request rate, error rate and latency histograms and graph the 50th, 95th and 99th percentiles.</p><a class="nb" href="../labs/D3_1_metrics.html">D3_1_metrics.html</a></div><ul class="checklist"><li>Add the counters and the latency histogram <span class="min">8 min</span></li><li>Add the prediction distribution <span class="min">4 min</span></li><li>Drive traffic and compute the percentiles <span class="min">7 min</span></li><li>Read the dashboard file; check <span class="min">6 min</span></li><li class="stretch">✱ Stretch: Move the histogram buckets and see how far the estimated 95th percentile moves</li></ul></div>
+  <aside class="notes"><p>AI policy: tutor. Usual problems: forgetting <code>registry=self.registry</code>, so the metric lands in the global registry and tests see it twice; buckets passed as a list of strings; quoting the PromQL on Windows (use the single quotes as shown in Git Bash, or a file). Solution: <code>labs/solutions/S3_1.py</code>.</p></aside>
+</section>
+
+<!-- Session 2 -->
+
+<section class="slide section" id="s2" data-auto="section" data-session="2" data-n="12">
+  <div class="kicker">Session 2</div>
+  <h1>Logs and traces</h1>
+  <ul class="bullets outcomes"><li>Write one structured log line per request with a request id</li><li>Redact personal fields before they reach a log or a trace, and test it</li><li>Follow one slow request through its spans to the slow step</li></ul>
+  <div class="sess-no">02</div>
+</section>
+
+<section class="slide" id="structured-logs" data-lo="LO5" data-n="13" data-session="2">
+  <div class="kicker">Structured logs</div>
+  <h2>One JSON line per event, with the fields you will search on</h2>
+  <pre class="code s" data-file="runs/service.log"><code class="language-json"><span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;claim_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;CLM-050017&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;line&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;health&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;label&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;investigate&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;version&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;1.0.0&quot;</span><span class="hljs-punctuation">,</span>
+ <span class="hljs-attr">&quot;event&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;triage&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;request_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;bf97fe2e0dc94165&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;level&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;info&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-11-15T06:40:42Z&quot;</span><span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;method&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;POST&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;route&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;/v1/triage&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;status&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">200</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;ms&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">28.37</span><span class="hljs-punctuation">,</span>
+ <span class="hljs-attr">&quot;event&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;request&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;request_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;bf97fe2e0dc94165&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;level&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;info&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;timestamp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-11-15T06:40:42Z&quot;</span><span class="hljs-punctuation">}</span></code></pre>
+  <ul class="bullets small mt">
+    <li>The <b>request id</b> joins every line of one request, and the claims system's own log</li>
+    <li>Fields, not sentences: a query finds every investigate label of version 1.0.0</li>
+  </ul>
+  <aside class="notes"><p>Two lines from the course's run, with the timestamp shortened and the first claim id changed for the slide. structlog renders them; the request id is bound once per request with context variables, so code deep inside the service does not pass it around. Ask: if the claims system sent its own correlation id, what would you do with it? Log both.</p></aside>
+</section>
+
+<section class="slide" id="what-leaked" data-lo="LO5" data-n="14" data-session="2">
+  <div class="kicker">Lab 3.2 · step 1</div>
+  <h2>Half the start state's log lines held a national id or a mobile number</h2>
+  <div class="cols cols-12 mid">
+    <div class="stat center"><div class="big">200 / 401</div><div class="lbl">log lines with personal numbers after 200 claims</div></div>
+    <pre class="code s" data-file="src/rifd/app.py · start state"><code class="language-python">logs.get().info(<span class="hljs-string">&quot;triage&quot;</span>, claim=claim.model_dump(),
+                label=out[<span class="hljs-string">&quot;label&quot;</span>], version=m.version)</code></pre>
+  </div>
+  <div class="callout warn mt"><b>What goes wrong.</b> Logging the whole object "for debugging" copies the member block into every log store, backup and search index.</div>
+  <aside class="notes"><p>Real count from the course's run: every triage line carried the member block. Under the Personal Data Protection Law a log is processing like any other: it needs a purpose, and triage logs have none for a national id. Ask where these logs would have gone: the log search tool, which on Day 2 the placement table kept inside the Kingdom for exactly this reason.</p></aside>
+</section>
+
+<section class="slide" id="redact-at-edge" data-lo="LO5" data-n="15" data-session="2">
+  <div class="kicker">Redaction</div>
+  <h2>Do not log it; then redact what slips through; then test both</h2>
+  <div class="flow">
+    <div class="step c-teal"><b>1 · Do not log it</b>log claim id, line, label, version: never the body</div>
+    <div class="arrow">→</div>
+    <div class="step c-amber"><b>2 · Redact</b>a logger processor masks national ids, mobiles and member fields</div>
+    <div class="arrow">→</div>
+    <div class="step c-navy"><b>3 · Test</b><code>tests/test_redaction.py</code> sends a claim and searches the log</div>
+  </div>
+  <div class="callout tip mt"><b>The first line is the defence.</b> A pattern cannot know every way personal data is written; not logging the body can.</div>
+  <aside class="notes"><p>The same rule applies to traces: no claim content in span attributes, only the request id. The test is what lets the dashboards and metrics go to the monitoring service: Bassam signs the placement on condition that it passes in every build.</p></aside>
+</section>
+
+<section class="slide" id="spans" data-lo="LO5" data-n="16" data-session="2">
+  <div class="kicker">Traces</div>
+  <h2>A trace is one request; each span is one step inside it</h2>
+  <div class="cols cols-2">
+    <table class="t small">
+      <tr><th>Span</th><th>Parent</th></tr>
+      <tr><td><code>POST /v1/triage</code></td><td>none: the root</td></tr>
+      <tr><td><code>fastapi.endpoint</code></td><td>the root</td></tr>
+      <tr><td><code>triage</code></td><td>fastapi.endpoint</td></tr>
+      <tr class="hl"><td><code>policy_lookup</code></td><td>triage</td></tr>
+      <tr><td><code>predict</code></td><td>triage</td></tr>
+    </table>
+    <ul class="bullets small">
+      <li>Every span has a trace id, its own id, its parent's id and a duration</li>
+      <li>OpenTelemetry writes them; the lab saves them to a file instead of a collector</li>
+      <li>The same code sends them over OTLP in production</li>
+    </ul>
+  </div>
+  <aside class="notes"><p>Parentage as the course's run recorded it. The root and the <code>fastapi.*</code> spans (endpoint, dependencies, serialisation) come from the instrumentation; <code>triage</code>, <code>policy_lookup</code> and <code>predict</code> are written in the service. In lab 3.2 the span around the policy lookup is missing, so its time hides inside <code>triage</code>: the lab puts it back and then looks for the slow step.</p></aside>
+</section>
+
+<section class="slide" id="slow-request" data-lo="LO5" data-n="17" data-session="2">
+  <div class="kicker">Lab 3.2 · step 3</div>
+  <h2>The slowest request spent its time waiting for the policy system</h2>
+  <div class="cols cols-2">
+    <div class="card c-coral tint"><h4>policy_lookup</h4><p class="small mb0">A 120 ms call to the policy system, made only for health claims outside the network: <b>7.0%</b> of 401 requests in the course's run.</p></div>
+    <div class="card c-teal tint"><h4>predict</h4><p class="small mb0">About 2 ms. Making the model faster would change nothing the caller feels.</p></div>
+  </div>
+  <div class="callout tip mt"><b>7% is more than 5%.</b> When more than one request in twenty takes the slow path, the 95th percentile falls inside it.</div>
+  <aside class="notes"><p>From the course's run. On the shared laptop of that run the 120 ms wait stretched to several hundred milliseconds under load, so the absolute times on your machines will differ; the shape will not. This is the bridge to session 3: a load test that never sends a health claim outside the network never sees this path.</p></aside>
+</section>
+
+<section class="slide" id="check-logs" data-lo="LO5" data-n="18" data-session="2">
+  <div class="kicker">Checkpoint</div>
+  <h2>Where should the national id stop?</h2>
+  <div class="quiz" data-type="single" data-lo="LO5" data-id="check-logs-q1">
+    <p class="lead">The fraud-review service logs each request body at debug level, and the log search tool hides the national id field in its display. A colleague says that is enough. What do you answer?</p>
+    <div class="opts">
+      <div class="opt" data-why="Debug logs get switched on in an incident, exactly when many people read them" data-k="A">It is enough while debug logging stays off in production</div>
+      <div class="opt" data-why="Hiding a field in the display leaves it stored, backed up and searchable" data-k="B">It is enough, because nobody sees the field</div>
+      <div class="opt" data-ok data-k="C">It is not: the id is already stored; stop logging the body and test that no id reaches a log</div>
+      <div class="opt" data-why="Encrypting the store still keeps a copy that serves no purpose" data-k="D">Encrypt the log store and keep logging the body</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> Data that is never written cannot leak or be misused; a display filter acts after the copy exists.</div>
+  </div>
+  <aside class="notes"><p>Answer: C. Then ask what the test should do: send a claim with a known national id and assert that the number appears in no log line and no span, which is what <code>tests/test_redaction.py</code> does.</p></aside>
+</section>
+
+<section class="slide lab top" id="lab-3-2" data-auto="lab" data-lab="3.2" data-label="Lab 3.2" data-n="19" data-session="2">
+  <div class="cols cols-2 mid"><div><div class="lab-tag">Lab 3.2 · 25 min</div><h2>Logs, redaction and a trace</h2><p class="lead small">Add structured logs with a request id, redact personal fields and follow one slow request through a trace.</p><a class="nb" href="../labs/D3_2_logs_traces.html">D3_2_logs_traces.html</a></div><ul class="checklist"><li>Find the personal fields in the current logs <span class="min">4 min</span></li><li>Log JSON with a request id; redact at the edge <span class="min">9 min</span></li><li>Add spans; find the slowest request and its slow span <span class="min">8 min</span></li><li>Check <span class="min">4 min</span></li><li class="stretch">✱ Stretch: Pass the request id to the policy lookup as a header and see it in the lookup's own log</li></ul></div>
+  <aside class="notes"><p>AI policy: tutor. Usual problems: leaving the old <code>runs/service.log</code> in place, so the check still finds the first run's personal data (delete it before the second run); binding the request id once at start instead of per request; a span opened but the lookup awaited outside it. Solution: <code>labs/solutions/S3_2.py</code>.</p></aside>
+</section>
+
+<!-- Session 3 -->
+
+<section class="slide section" id="s3" data-auto="section" data-session="3" data-n="20">
+  <div class="kicker">Session 3</div>
+  <h1>Load testing</h1>
+  <ul class="bullets outcomes"><li>Write a load test that sends realistic requests at a fixed rate</li><li>Run it at three rates and read percentiles, errors and throughput</li><li>Locate the rate at which the 95th percentile breaks the objective</li></ul>
+  <div class="sess-no">03</div>
+</section>
+
+<section class="slide" id="the-objective" data-lo="LO6" data-n="21" data-session="3">
+  <div class="kicker">The objective</div>
+  <h2>Munira's objective: 95% of claims answered within 150 ms at 200 a second</h2>
+  <div class="cols cols-3">
+    <div class="stat center"><div class="big">150 ms</div><div class="lbl">95th percentile, measured by the caller</div></div>
+    <div class="stat center"><div class="big">200 / s</div><div class="lbl">the peak after a sandstorm or a flood</div></div>
+    <div class="stat center"><div class="big">1%</div><div class="lbl">most errors allowed</div></div>
+  </div>
+  <p class="small mt">Written in <code>../data/objective.json</code> by the owner of the service, before anyone measured anything.</p>
+  <aside class="notes"><p>The objective belongs to the business, not to the engineers: Munira decided what a claims handler can wait for at the worst hour. "Measured by the caller" matters: the service's own histogram leaves out the network and the queue in front of it, so the load test measures from outside.</p></aside>
+</section>
+
+<section class="slide" id="open-closed" data-lo="LO6" data-n="22" data-session="3">
+  <div class="kicker">Two kinds of load</div>
+  <h2>Real callers do not wait for each other: test with an open load</h2>
+  <div class="cols cols-2">
+    <div class="card c-coral flat"><h4>Closed</h4><p class="small mb0">N users, each sends the next request after the last answer. When Farz slows, the test sends less, and the queue a real caller meets never forms.</p></div>
+    <div class="card c-teal flat"><h4>Open</h4><p class="small mb0">Requests leave on a schedule, 200 a second, whatever the answers do. A slowdown shows as a queue and a higher percentile.</p></div>
+  </div>
+  <div class="callout warn mt"><b>What goes wrong.</b> A closed test reports good percentiles exactly when the service is overloaded.</div>
+  <aside class="notes"><p>Gil Tene called the closed-loop bias "coordinated omission". <code>tools/loadtest.py</code> is open: requests leave on schedule from a thread pool. Locust with <code>constant_throughput(1)</code> per user is open only while each answer takes under a second; k6's constant-arrival-rate executor is open. On the course's Windows laptops Locust itself added latency, so the lab uses the course's tool and keeps Locust as an option.</p></aside>
+</section>
+
+<section class="slide" id="realistic-requests" data-lo="LO6" data-n="23" data-session="3">
+  <div class="kicker">Lab 3.3 · step 2</div>
+  <h2>One claim a hundred times a second is not Farz's traffic</h2>
+  <table class="t small">
+    <tr><th></th><th>loadtest/one_claim.csv</th><th>../data/replay/week1.csv</th></tr>
+    <tr><td>Claims</td><td>one motor claim</td><td>3,000 claims: motor, health, property</td></tr>
+    <tr><td>Calls the policy lookup</td><td>never</td><td>about 7% of claims</td></tr>
+    <tr class="hl"><td>What its 95th percentile measures</td><td>the fast path only</td><td>the path a claims handler waits on</td></tr>
+  </table>
+  <aside class="notes"><p>The supplied load test sends one claim, so it never meets the slow path that session 2's trace found. The fix is one argument: <code>--file ../data/replay/week1.csv</code>. Ask the room what else a realistic load test needs: the mix of lines and channels, the size of the descriptions, and the rate of the peak hour.</p></aside>
+</section>
+
+<section class="slide" id="warm-up-rates" data-lo="LO6" data-n="24" data-session="3">
+  <div class="kicker">Running it</div>
+  <h2>Warm up, then hold each rate long enough to count its tail</h2>
+  <pre class="code s" data-file="terminal"><code class="language-bash">uv run python tools/loadtest.py --rates 80 150 220 --seconds 20 --warmup 3 \
+  --file ../data/replay/week1.csv --label <span class="hljs-string">&quot;1 worker&quot;</span> --out runs/load.json</code></pre>
+  <ul class="bullets small mt">
+    <li>The warm-up is not counted: first connections and caches are not the steady state</li>
+    <li>20 s at 150 a second is 3,000 requests: 150 of them are in the slowest 5%</li>
+    <li>Choose rates so that one holds the objective and one breaks it</li>
+  </ul>
+  <aside class="notes"><p>A 99th percentile from 200 requests is two requests: hold the rate longer before you quote it. The rates on the slide are those of the course's solution; on a slower laptop choose lower ones. Close other programs: a load generator and a service on one laptop compete for the same processors.</p></aside>
+</section>
+
+<section class="slide" id="the-knee" data-lo="LO6" data-n="25" data-session="3">
+  <div class="kicker">Reading the result</div>
+  <h2>Latency stays flat, then rises sharply: that bend is the capacity</h2>
+  <div class="flow">
+    <div class="step c-teal"><b>Below the knee</b>p95 set by the slow path, about 120 to 130 ms</div>
+    <div class="arrow">→</div>
+    <div class="step c-amber"><b>At the knee</b>requests start to queue; p95 climbs past 150 ms</div>
+    <div class="arrow">→</div>
+    <div class="step c-coral"><b>Above it</b>the achieved rate stops following the target</div>
+  </div>
+  <div class="callout tip mt"><b>Read three columns.</b> The 95th percentile, the error ratio, and whether the achieved rate kept up with the target.</div>
+  <aside class="notes"><p>In the course's final run one worker held the objective at 120 a second (95th percentile 129 ms) and broke it at 160 (262 ms); an earlier quiet run put the knee near 160. Later runs on the same laptop, shared with other heavy jobs, held the objective only at 40 a second, and the achieved rate stopped near 85: show participants that a load test measures the machine too, and that capacity must be measured on the hardware that will serve.</p></aside>
+</section>
+
+<section class="slide" id="check-load" data-lo="LO6" data-n="26" data-session="3">
+  <div class="kicker">Checkpoint</div>
+  <h2>What did this load test miss?</h2>
+  <div class="quiz" data-type="single" data-lo="LO6" data-id="check-load-q1">
+    <p class="lead">A team load-tests the fraud-review service with 50 users, each sending the next request when the last answer arrives. The 95th percentile stays at 40 ms while the service's own histogram shows 400 ms in the same minute. What explains it?</p>
+    <div class="opts">
+      <div class="opt" data-ok data-k="A">A closed load: users waited for slow answers, so fewer requests were sent and timed exactly when it slowed</div>
+      <div class="opt" data-why="The histogram measures inside the service; network time would make the caller's numbers larger, not smaller" data-k="B">The network between the test and the service</div>
+      <div class="opt" data-why="A warm-up affects the first seconds, not a whole minute" data-k="C">The test had no warm-up</div>
+      <div class="opt" data-why="Buckets make the estimate coarse, not ten times wrong in the other direction" data-k="D">The histogram buckets are too wide</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> In a closed test the callers slow down with the service, so the slow period contributes few requests and the percentile looks good.</div>
+  </div>
+  <aside class="notes"><p>Answer: A. Ask how to fix it: an open load at a fixed rate, or at least many more users each with a fixed throughput, and compare with the service's histogram.</p></aside>
+</section>
+
+<section class="slide lab top" id="lab-3-3" data-auto="lab" data-lab="3.3" data-label="Lab 3.3" data-n="27" data-session="3">
+  <div class="cols cols-2 mid"><div><div class="lab-tag">Lab 3.3 · 25 min</div><h2>Three rates against the objective</h2><p class="lead small">Run a load test at three request rates and find where latency breaks the objective.</p><a class="nb" href="../labs/D3_3_load_test.html">D3_3_load_test.html</a></div><ul class="checklist"><li>Read the objective and the locust file <span class="min">4 min</span></li><li>Make the requests realistic <span class="min">5 min</span></li><li>Run three rates with a warm-up <span class="min">10 min</span></li><li>Report where the objective breaks; check <span class="min">6 min</span></li><li class="stretch">✱ Stretch: Run the same rates with k6 and compare the two tools' numbers</li></ul></div>
+  <aside class="notes"><p>AI policy: tutor. Usual problems: a server started with <code>--reload</code>, which halves throughput; using <code>localhost</code> on Windows, which can add about 200 ms per connection while it tries IPv6 first (use <code>127.0.0.1</code>); rates too high for the laptop, so nothing holds. Solution: <code>labs/solutions/S3_3.py</code>.</p></aside>
+</section>
+
+<!-- Session 4 -->
+
+<section class="slide section" id="s4" data-auto="section" data-session="4" data-n="28">
+  <div class="kicker">Session 4</div>
+  <h1>Sizing and cost</h1>
+  <ul class="bullets outcomes"><li>Measure the rate one worker carries within the objective</li><li>Choose workers and replicas for a target rate with headroom</li><li>Compute the cost per 1,000 predictions of a configuration</li></ul>
+  <div class="sess-no">04</div>
+</section>
+
+<section class="slide" id="workers-replicas" data-lo="LO6" data-n="29" data-session="4">
+  <div class="kicker">Two ways to add capacity</div>
+  <h2>Workers share a container; replicas are containers of their own</h2>
+  <div class="cols cols-2">
+    <div class="card c-navy flat"><h4>Workers</h4><p class="small mb0"><code>uvicorn --workers 2</code>: two Python processes in one container. Each holds its own copy of the model; together they use more than one processor.</p></div>
+    <div class="card c-teal flat"><h4>Replicas</h4><p class="small mb0"><code>replicas: 3</code>: three pods, which the cluster can place on different nodes and replace one at a time.</p></div>
+  </div>
+  <div class="callout tip mt"><b>One process per processor is the usual start.</b> Python runs one thread of Python code at a time per process, so a CPU-bound service scales with processes.</div>
+  <aside class="notes"><p>One more setting matters: <code>OMP_NUM_THREADS=1</code>, set in <code>rifd/__init__.py</code>. In the course's run, without it, farz 1.2.0's gradient boosting started a thread per core for every one-row prediction and took about 2 s per request on a busy laptop; with it, about 45 ms. The note is about CPython's global interpreter lock; free-threaded builds exist but the libraries Farz uses are not tested on them in this course. On a cluster, many teams run one worker per pod and scale replicas, so the cluster sees each process; lab 3.4 measures both ways on one laptop. Autoscaling on the right signal and accelerators are the subject of AE-307, which follows this course.</p></aside>
+</section>
+
+<section class="slide" id="headroom" data-lo="LO6" data-n="30" data-session="4">
+  <div class="kicker">From capacity to replicas</div>
+  <h2>Run each replica below its measured capacity, and keep one spare</h2>
+  <pre class="code s" data-file="tools/sizing.py"><code class="language-python"><span class="hljs-keyword">def</span> <span class="hljs-title function_">replicas_needed</span>(<span class="hljs-params">target_rps, capacity_rps, headroom, spare=<span class="hljs-number">1</span></span>):
+    <span class="hljs-keyword">return</span> math.ceil(target_rps / (capacity_rps * (<span class="hljs-number">1</span> - headroom))) + spare</code></pre>
+  <div class="cols cols-2 mt">
+    <div class="callout note small"><b>Headroom 30%.</b> A replica measured at 160 a second is planned at 112: bursts and a noisy neighbour stay inside the objective.</div>
+    <div class="callout note small"><b>One spare.</b> A rolling update or a lost node takes one replica away without breaking the objective.</div>
+  </div>
+  <aside class="notes"><p>Worked example with the quiet-run capacity: ceil(200 / 112) = 2, plus one spare: 3 replicas of one worker. Headroom and spares are Rifd's choices in the case study, written in the lab, not universal numbers. Ask: what would you change if the peak lasted only ten minutes a month?</p></aside>
+</section>
+
+<section class="slide" id="cost-per-1000" data-lo="LO6" data-n="31" data-session="4">
+  <div class="kicker">The price of a prediction</div>
+  <h2>Cost per 1,000 predictions makes two configurations comparable</h2>
+  <div class="cols cols-2">
+    <table class="t small">
+      <tr><th>Rifd's price sheet</th><th>SAR an hour</th></tr>
+      <tr><td>1 vCPU</td><td>0.19</td></tr>
+      <tr><td>1 GiB of memory</td><td>0.025</td></tr>
+      <tr><td>1 GPU</td><td>7.40</td></tr>
+    </table>
+    <div class="stack">
+      <p class="small mb0">Three replicas of one worker (1 vCPU, 0.25 GiB each): 3 × 0.19625 = <b>SAR 0.589 an hour</b>.</p>
+      <p class="small mb0">200 a second is 720,000 predictions an hour: <b>SAR 0.00082 per 1,000</b>.</p>
+    </div>
+  </div>
+  <aside class="notes"><p>The prices are invented for the course and labelled so in the data. The sheet prices what a replica reserves (its CPU and memory requests), not what it happens to use, which is how the quote Rifd was given works. The arithmetic is the point: cost per hour divided by thousands of predictions per hour. Participants compute it for their own configurations in the lab.</p></aside>
+</section>
+
+<section class="slide" id="cpu-or-gpu" data-lo="LO6" data-n="32" data-session="4">
+  <div class="kicker">Processor or graphics processor?</div>
+  <h2>For Farz, a graphics processor would cost over twelve times more and help nothing</h2>
+  <div class="cols cols-2">
+    <div class="stat center"><div class="big">SAR 0.0103</div><div class="lbl">per 1,000 predictions on one GPU replica alone, at 200 a second</div></div>
+    <ul class="bullets small">
+      <li>The model takes about a millisecond; the slow path is a 120 ms wait for another system</li>
+      <li>A logistic regression on ten features has little to run in parallel</li>
+      <li>Graphics processors pay off for large neural networks and batches</li>
+    </ul>
+  </div>
+  <aside class="notes"><p>7.40 / (200 × 3.6) = 0.0103 SAR per 1,000, against about 0.0008 for three CPU replicas: over twelve times more, before counting that one replica has no spare. The lesson is the order of questions: where does the time go (the trace), what does it cost (the sheet), then which hardware. AE-401 covers serving large language models, where the answer differs.</p></aside>
+</section>
+
+<section class="slide" id="check-sizing" data-lo="LO6" data-n="33" data-session="4">
+  <div class="kicker">Checkpoint</div>
+  <h2>How many replicas?</h2>
+  <div class="quiz" data-type="single" data-lo="LO6" data-id="check-sizing-q1">
+    <p class="lead">One replica of the fraud-review service holds its objective up to 60 requests a second. The target is 150 a second. The team plans 20% headroom and one spare replica. How many replicas does it need?</p>
+    <div class="opts">
+      <div class="opt" data-why="Forgets the headroom or the spare: either one alone gives 4" data-k="A">4</div>
+      <div class="opt" data-ok data-k="B">5</div>
+      <div class="opt" data-why="Counts the headroom as an extra replica on top of the spare" data-k="C">6</div>
+      <div class="opt" data-why="Forgets both: 150 / 60 rounds up to 3, each replica at over 80% of capacity and nothing spare" data-k="D">3</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> Each replica is planned at 60 × 0.8 = 48 a second, so 150 / 48 = 3.1, rounded up to 4, plus one spare: 5.</div>
+  </div>
+  <aside class="notes"><p>Answer: B. Option A is two different mistakes that land on the same number: without headroom 150 / 60 rounds up to 3, plus the spare is 4; with headroom but no spare it is also 4. Ask which of the two mistakes is worse during a rolling update.</p></aside>
+</section>
+
+<section class="slide lab top" id="lab-3-4" data-auto="lab" data-lab="3.4" data-label="Lab 3.4" data-n="34" data-session="4">
+  <div class="cols cols-2 mid"><div><div class="lab-tag">Lab 3.4 · 25 min</div><h2>Workers, replicas and cost</h2><p class="lead small">Tune workers and replicas to meet the latency objective and compute cost per 1,000 predictions.</p><a class="nb" href="../labs/D3_4_sizing_cost.html">D3_4_sizing_cost.html</a></div><ul class="checklist"><li>Measure one, two and four workers at the target rate <span class="min">10 min</span></li><li>Choose workers and replicas with headroom <span class="min">6 min</span></li><li>Compute cost per 1,000 predictions <span class="min">5 min</span></li><li>Check <span class="min">4 min</span></li><li class="stretch">✱ Stretch: Price the same load on the cheapest configuration that breaks the objective and say what Munira would lose</li></ul></div>
+  <aside class="notes"><p>AI policy: tutor. Usual problems: labels without the word "worker", which <code>sizing.py</code> needs to read the configuration; four workers on a laptop with four cores, which leaves nothing for the load generator; quoting the capacity of a run where the achieved rate did not keep up. Solution: <code>labs/solutions/S3_4.py</code>.</p></aside>
+</section>
+
+<section class="slide" id="wrap-up" data-lo="LO5 LO6" data-n="35" data-session="4">
+  <div class="kicker">Day 3 · wrap-up</div>
+  <h2>Three things to keep from today</h2>
+  <div class="cols cols-3">
+    <div class="card c-teal"><h4>Measure what callers feel</h4><p class="small mb0">Rate, errors, a latency histogram with buckets near the objective, and the label shares.</p></div>
+    <div class="card c-cyan"><h4>Never write what you must protect</h4><p class="small mb0">Log fields, not bodies; redact as a last defence; test it. Traces find the slow step.</p></div>
+    <div class="card c-coral"><h4>Size from a realistic open load</h4><p class="small mb0">Find the knee, plan below it with headroom and a spare, and price it per 1,000.</p></div>
+  </div>
+  <aside class="notes"><p>Ask each participant which of their own services has a written latency objective. Tomorrow two new versions of Farz are released as canaries: one is judged against written criteria, one is rolled back on evidence, and four weeks of claims show drift.</p></aside>
+</section>
+
+<section class="slide dark" id="next" data-lo="LO7" data-n="36" data-session="4">
+  <div class="kicker">Next</div>
+  <h2>Day 4: release and watch</h2>
+  <ul class="bullets">
+    <li>A 10% canary of Farz 1.1.0, compared like with like</li>
+    <li>A faulty 1.2.0, rolled back within five minutes on written criteria</li>
+    <li>Drift in four weeks of claims, two alert rules and a runbook</li>
+  </ul>
+  <aside class="notes"><p>Tonight: read <code>../data/rollback_criteria.md</code> and decide what you would add. Lab 4.4's alert rules are written without AI help first.</p></aside>
+</section>
+</div>
+<script type="application/json" id="academy-data">{"v":1,"engine":"1.0.0","build":{"at":"2026-11-15T09:27:24Z","version":"2027.1.0","commit":"fec8449"},"course":{"id":"ae-205","code":"AE-205","title":"Deploying AI Services: Containers, Serving and Monitoring","track":"ai-engineering","lang":"en","dir":"ltr","url":"https://sdaiaacademy.github.io/ae-205/","repo":"SDAIAAcademy/ae-205","home":"../index.html"},"deck":{"id":"day3","kind":"day","day":3,"label":"Day 3","title":"Observe and size","prev":"day2.html","next":"day4.html","md":"day3.md","alt":{}},"sessions":[{"n":1,"label":"Session 1","title":"Metrics that matter","slide":"s1","outcomes":["Instrument a service with request, error and latency metrics","Compute the 50th, 95th and 99th percentiles from histogram buckets","Define a dashboard as code with latency, errors and predictions"],"minutes":50,"lab":{"id":"3.1","title":"Rate, errors and latency","minutes":25,"href":"../labs/D3_1_metrics.html"}},{"n":2,"label":"Session 2","title":"Logs and traces","slide":"s2","outcomes":["Write one structured log line per request with a request id","Redact personal fields before they reach a log or a trace, and test it","Follow one slow request through its spans to the slow step"],"minutes":50,"lab":{"id":"3.2","title":"Logs, redaction and a trace","minutes":25,"href":"../labs/D3_2_logs_traces.html"}},{"n":3,"label":"Session 3","title":"Load testing","slide":"s3","outcomes":["Write a load test that sends realistic requests at a fixed rate","Run it at three rates and read percentiles, errors and throughput","Locate the rate at which the 95th percentile breaks the objective"],"minutes":50,"lab":{"id":"3.3","title":"Three rates against the objective","minutes":25,"href":"../labs/D3_3_load_test.html"}},{"n":4,"label":"Session 4","title":"Sizing and cost","slide":"s4","outcomes":["Measure the rate one worker carries within the objective","Choose workers and replicas for a target rate with headroom","Compute the cost per 1,000 predictions of a configuration"],"minutes":50,"lab":{"id":"3.4","title":"Workers, replicas and cost","minutes":25,"href":"../labs/D3_4_sizing_cost.html"}}],"slides":[{"id":"title","n":1,"title":"Observe and size","kind":"title","session":0,"hash":"4c48f9bb","md":"#### [day3#title] Observe and size\n\n*SDAIA Academy · Deploying AI Services: Containers, Serving and Monitoring*\n\nDay 3: Metrics, logs and traces that answer questions, then the load the service can carry and what it costs\n\nAI Engineering Track · 4 teaching days + capstone day · 4 sessions · 4 labs · AE-205","notes":"Welcome to Day 3. Ask the room: how did you last find out that a service of yours was slow, from a dashboard or from a user? Today Farz gets the instruments that answer before a user does, then a load test and a sizing decision against Munira's objective.\n\nEvery lab today runs with uv on the laptop; no container runtime is needed. Ask participants to close heavy programs before sessions 3 and 4: load tests measure the laptop as much as the service.","minutes":null,"lo":[]},{"id":"agenda","n":2,"title":"Observe and size","kind":"content","session":0,"hash":"90c47854","md":"#### [day3#agenda] Observe and size\n\n*Today*\n\n- **Session 1 · Metrics that matter**: Rate, errors and duration, histograms and their buckets, percentiles, the distribution of predictions and dashboards defined as code\n- **Session 2 · Logs and traces**: Structured logs with a request id, personal fields redacted at the edge, and traces that show where one slow request spent its time\n- **Session 3 · Load testing**: Open and closed load, warm-up, steady rates, percentiles under load and the knee where latency breaks the objective\n- **Session 4 · Sizing and cost**: Workers and replicas, concurrency on a processor, headroom, processor against graphics-processor serving and the cost of 1,000 predictions","notes":"","minutes":null,"lo":[]},{"id":"s1","n":3,"title":"Metrics that matter","kind":"section","session":1,"hash":"98606e0a","md":"#### [day3#s1] Metrics that matter\n\n*Session 1*\n\n- Instrument a service with request, error and latency metrics\n- Compute the 50th, 95th and 99th percentiles from histogram buckets\n- Define a dashboard as code with latency, errors and predictions","notes":"","minutes":null,"lo":["LO5"]},{"id":"three-questions","n":4,"title":"Rate, errors and duration describe what every caller felt","kind":"content","session":1,"hash":"8ae48e94","md":"#### [day3#three-questions] Rate, errors and duration describe what every caller felt\n\n*What to measure*\n\n- **Rate.** Requests a second, by route. The claims system's traffic, as Farz saw it.\n- **Errors.** The share of requests that failed, by status. A 5xx is Farz's fault; a 4xx is the caller's.\n- **Duration.** How long requests took, as a distribution: percentiles, not an average.\n\n> **A model adds a fourth.** What it predicted: the share of each label, by version.","notes":"This is the RED method (rate, errors, duration), a reduction of Google's four golden signals, which add saturation. Saturation comes in session 4 with sizing. The fourth metric is the one an ordinary web service does not have: a model can answer fast, with status 200, and be wrong for everyone.","minutes":null,"lo":["LO5"]},{"id":"metric-types","n":5,"title":"Counters only go up; a histogram counts observations into buckets","kind":"content","session":1,"hash":"a4a1c4ee","md":"#### [day3#metric-types] Counters only go up; a histogram counts observations into buckets\n\n*Prometheus metric types*\n\n| Type | What it holds | Farz uses it for |\n| --- | --- | --- |\n| Counter | a total that only increases; `rate()` turns it into a speed | `rifd_requests_total`, `rifd_predictions_total` |\n| Gauge | a value that goes up and down | `rifd_model_ready` |\n| Histogram | a count per bucket boundary, plus a sum and a count | `rifd_request_duration_seconds` |\n| Summary | percentiles computed in the process | nothing: they cannot be added across replicas |","notes":"The Prometheus client libraries define these four. Ask why a counter is better than a gauge of \"requests in the last minute\": a counter survives a missed scrape, because the next one still shows the total, and `rate()` handles restarts that reset it to zero.","minutes":null,"lo":["LO5"]},{"id":"labels-cardinality","n":6,"title":"Every distinct set of label values is a new time series","kind":"content","session":1,"hash":"83efedd2","md":"#### [day3#labels-cardinality] Every distinct set of label values is a new time series\n\n*Labels*\n\n```python\n# file: src/rifd/metrics.py\nself.predictions = Counter(\n    \"rifd_predictions\",\n    \"Predictions made, by model version and label\",\n    [\"model\", \"version\", \"label\"])\n```\n\n- 2 versions × 3 labels: **6 series**\n- Add `claim_id`: a series per claim, and the monitoring system stores every one\n- A label value is also data that leaves the service: never a member field","notes":"High cardinality is the commonest way to break a Prometheus server. The second point ties back to Day 2's placement table: the dashboards may run outside the Kingdom only because their labels carry no personal data. A claim id is not personal by itself, but it links to a member in the claims system.","minutes":null,"lo":["LO5"]},{"id":"histogram-quantile","n":7,"title":"histogram_quantile finds the bucket and draws a straight line inside it","kind":"content","session":1,"hash":"a00e1a6e","md":"#### [day3#histogram-quantile] histogram_quantile finds the bucket and draws a straight line inside it\n\n*Percentiles from buckets*\n\n```text\n# file: PromQL\nhistogram_quantile(0.95,\n  sum by (le) (rate(rifd_request_duration_seconds_bucket{route=\"/v1/triage\"}[1m])))\n```\n\n> **Sum, then estimate.** Bucket rates add up across replicas; the 95th percentile of the sum is the 95th percentile of the service.\n\n> **Only as precise as the buckets.** Farz's boundaries are 0.1, 0.15 and 0.2 around the objective; with only 0.1 and 0.5 the estimate could be anywhere in between.","notes":"The function assumes observations are spread evenly inside a bucket and interpolates. That is why the course's buckets are dense around 150 ms, where Munira's objective is judged: `(0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.15, 0.2, 0.3, 0.5, 1, 2.5)`. The stretch of lab 3.1 moves them and watches the estimate move.","minutes":null,"lo":["LO5"]},{"id":"prediction-panel","n":8,"title":"The share of each label is the first sign that something changed","kind":"content","session":1,"hash":"dc0b1d80","md":"#### [day3#prediction-panel] The share of each label is the first sign that something changed\n\n*The model's own signal*\n\n- **36%** fast track in the training claims\n- **47%** standard\n- **16%** investigate\n\nThe panel `sum by (version, label) (rate(rifd_predictions_total[1m]))` shows these shares live, per version. A canary whose shares differ by more than 10 points breaks one of Munira's rollback criteria on Day 4.","notes":"Shares of the labels in the 50,000 generated claims (fast track 36.6%, standard 47.2%, investigate 16.3%). Farz's own predictions on week 1 were 35% fast track, 45% standard and 20% investigate: a model does not reproduce the shares exactly, so the dashboard compares the model with itself over time and across versions.","minutes":null,"lo":["LO5"]},{"id":"dashboard-as-code","n":9,"title":"The dashboard is a file in the repository, reviewed like code","kind":"content","session":1,"hash":"0f8cf676","md":"#### [day3#dashboard-as-code] The dashboard is a file in the repository, reviewed like code\n\n*Dashboards as code*\n\n- `monitoring/dashboard.json`: four panels, each a PromQL query\n- Grafana loads it at start from `monitoring/grafana/` (provisioning)\n- The lab's check reads the file: a test of the dashboard\n- A change to a metric name breaks a test, not the on-call engineer's night\n\n- **Four panels.** Requests a second by status; error ratio; p50, p95 and p99 of triage; predictions a second by version and label.","notes":"With a container runtime, `docker compose -f monitoring/compose.yaml up` starts Prometheus 3.16 and Grafana 13.2 with this dashboard; the course's own run could not start containers, so the lab uses `promlite`, which reads the same queries. Ask: who reviews a dashboard change in your team today?","minutes":null,"lo":["LO5"]},{"id":"check-metrics","n":10,"title":"How do you get the service's 95th percentile?","kind":"quiz","session":1,"hash":"b551e03a","md":"#### [day3#check-metrics] How do you get the service's 95th percentile?\n\n*Checkpoint*\n\n**Question:** Farz runs four replicas. Each exposes its latency histogram. The dashboard must show the 95th percentile of all triage requests in the last minute. Which query is right?\n\n- A. avg of histogram_quantile(0.95, …) computed for each replica\n- B. max of histogram_quantile(0.95, …) over the replicas\n- C. rate of the duration sum divided by the rate of the count\n- D. histogram_quantile(0.95, sum by (le) (rate(…_bucket[1m])))","notes":"Answer: D. Option C is the mean latency, a useful number but not the objective. If many choose A, draw two replicas, one slow and one fast, and show that the average of their 95th percentiles is not where 95% of all requests fall.","minutes":null,"lo":["LO5"]},{"id":"lab-3-1","n":11,"title":"Rate, errors and latency","kind":"lab","session":1,"hash":"0285ecb4","md":"#### [day3#lab-3-1] Rate, errors and latency\n\nLab 3.1 · 25 min\n\nExpose request rate, error rate and latency histograms and graph the 50th, 95th and 99th percentiles.\n\n[D3_1_metrics.html](https://sdaiaacademy.github.io/ae-205/labs/D3_1_metrics.html)\n\n- [ ] Add the counters and the latency histogram (8 min)\n- [ ] Add the prediction distribution (4 min)\n- [ ] Drive traffic and compute the percentiles (7 min)\n- [ ] Read the dashboard file; check (6 min)\n- [ ] ✱ Stretch: Move the histogram buckets and see how far the estimated 95th percentile moves","notes":"AI policy: tutor. Usual problems: forgetting `registry=self.registry`, so the metric lands in the global registry and tests see it twice; buckets passed as a list of strings; quoting the PromQL on Windows (use the single quotes as shown in Git Bash, or a file). Solution: `labs/solutions/S3_1.py`.","minutes":null,"lo":[]},{"id":"s2","n":12,"title":"Logs and traces","kind":"section","session":2,"hash":"9e0e1fdc","md":"#### [day3#s2] Logs and traces\n\n*Session 2*\n\n- Write one structured log line per request with a request id\n- Redact personal fields before they reach a log or a trace, and test it\n- Follow one slow request through its spans to the slow step","notes":"","minutes":null,"lo":["LO5"]},{"id":"structured-logs","n":13,"title":"One JSON line per event, with the fields you will search on","kind":"content","session":2,"hash":"fea70c8a","md":"#### [day3#structured-logs] One JSON line per event, with the fields you will search on\n\n*Structured logs*\n\n```json\n// file: runs/service.log\n{\"claim_id\": \"CLM-050017\", \"line\": \"health\", \"label\": \"investigate\", \"version\": \"1.0.0\",\n \"event\": \"triage\", \"request_id\": \"bf97fe2e0dc94165\", \"level\": \"info\", \"timestamp\": \"2026-11-15T06:40:42Z\"}\n{\"method\": \"POST\", \"route\": \"/v1/triage\", \"status\": 200, \"ms\": 28.37,\n \"event\": \"request\", \"request_id\": \"bf97fe2e0dc94165\", \"level\": \"info\", \"timestamp\": \"2026-11-15T06:40:42Z\"}\n```\n\n- The **request id** joins every line of one request, and the claims system's own log\n- Fields, not sentences: a query finds every investigate label of version 1.0.0","notes":"Two lines from the course's run, with the timestamp shortened and the first claim id changed for the slide. structlog renders them; the request id is bound once per request with context variables, so code deep inside the service does not pass it around. Ask: if the claims system sent its own correlation id, what would you do with it? Log both.","minutes":null,"lo":["LO5"]},{"id":"what-leaked","n":14,"title":"Half the start state's log lines held a national id or a mobile number","kind":"content","session":2,"hash":"5ee886b3","md":"#### [day3#what-leaked] Half the start state's log lines held a national id or a mobile number\n\n*Lab 3.2 · step 1*\n\n**200 / 401** log lines with personal numbers after 200 claims\n\n```python\n# file: src/rifd/app.py · start state\nlogs.get().info(\"triage\", claim=claim.model_dump(),\n                label=out[\"label\"], version=m.version)\n```\n\n> **What goes wrong.** Logging the whole object \"for debugging\" copies the member block into every log store, backup and search index.","notes":"Real count from the course's run: every triage line carried the member block. Under the Personal Data Protection Law a log is processing like any other: it needs a purpose, and triage logs have none for a national id. Ask where these logs would have gone: the log search tool, which on Day 2 the placement table kept inside the Kingdom for exactly this reason.","minutes":null,"lo":["LO5"]},{"id":"redact-at-edge","n":15,"title":"Do not log it; then redact what slips through; then test both","kind":"content","session":2,"hash":"ce578aa4","md":"#### [day3#redact-at-edge] Do not log it; then redact what slips through; then test both\n\n*Redaction*\n\n1. **1 · Do not log it** log claim id, line, label, version: never the body\n2. **2 · Redact** a logger processor masks national ids, mobiles and member fields\n3. **3 · Test** `tests/test_redaction.py` sends a claim and searches the log\n\n> **The first line is the defence.** A pattern cannot know every way personal data is written; not logging the body can.","notes":"The same rule applies to traces: no claim content in span attributes, only the request id. The test is what lets the dashboards and metrics go to the monitoring service: Bassam signs the placement on condition that it passes in every build.","minutes":null,"lo":["LO5"]},{"id":"spans","n":16,"title":"A trace is one request; each span is one step inside it","kind":"content","session":2,"hash":"57e3ca79","md":"#### [day3#spans] A trace is one request; each span is one step inside it\n\n*Traces*\n\n| Span | Parent |\n| --- | --- |\n| `POST /v1/triage` | none: the root |\n| `fastapi.endpoint` | the root |\n| `triage` | fastapi.endpoint |\n| `policy_lookup` | triage |\n| `predict` | triage |\n\n- Every span has a trace id, its own id, its parent's id and a duration\n- OpenTelemetry writes them; the lab saves them to a file instead of a collector\n- The same code sends them over OTLP in production","notes":"Parentage as the course's run recorded it. The root and the `fastapi.*` spans (endpoint, dependencies, serialisation) come from the instrumentation; `triage`, `policy_lookup` and `predict` are written in the service. In lab 3.2 the span around the policy lookup is missing, so its time hides inside `triage`: the lab puts it back and then looks for the slow step.","minutes":null,"lo":["LO5"]},{"id":"slow-request","n":17,"title":"The slowest request spent its time waiting for the policy system","kind":"content","session":2,"hash":"9c34456e","md":"#### [day3#slow-request] The slowest request spent its time waiting for the policy system\n\n*Lab 3.2 · step 3*\n\n- **policy_lookup.** A 120 ms call to the policy system, made only for health claims outside the network: **7.0%** of 401 requests in the course's run.\n- **predict.** About 2 ms. Making the model faster would change nothing the caller feels.\n\n> **7% is more than 5%.** When more than one request in twenty takes the slow path, the 95th percentile falls inside it.","notes":"From the course's run. On the shared laptop of that run the 120 ms wait stretched to several hundred milliseconds under load, so the absolute times on your machines will differ; the shape will not. This is the bridge to session 3: a load test that never sends a health claim outside the network never sees this path.","minutes":null,"lo":["LO5"]},{"id":"check-logs","n":18,"title":"Where should the national id stop?","kind":"quiz","session":2,"hash":"9c482828","md":"#### [day3#check-logs] Where should the national id stop?\n\n*Checkpoint*\n\n**Question:** The fraud-review service logs each request body at debug level, and the log search tool hides the national id field in its display. A colleague says that is enough. What do you answer?\n\n- A. It is enough while debug logging stays off in production\n- B. It is enough, because nobody sees the field\n- C. It is not: the id is already stored; stop logging the body and test that no id reaches a log\n- D. Encrypt the log store and keep logging the body","notes":"Answer: C. Then ask what the test should do: send a claim with a known national id and assert that the number appears in no log line and no span, which is what `tests/test_redaction.py` does.","minutes":null,"lo":["LO5"]},{"id":"lab-3-2","n":19,"title":"Logs, redaction and a trace","kind":"lab","session":2,"hash":"9c92b787","md":"#### [day3#lab-3-2] Logs, redaction and a trace\n\nLab 3.2 · 25 min\n\nAdd structured logs with a request id, redact personal fields and follow one slow request through a trace.\n\n[D3_2_logs_traces.html](https://sdaiaacademy.github.io/ae-205/labs/D3_2_logs_traces.html)\n\n- [ ] Find the personal fields in the current logs (4 min)\n- [ ] Log JSON with a request id; redact at the edge (9 min)\n- [ ] Add spans; find the slowest request and its slow span (8 min)\n- [ ] Check (4 min)\n- [ ] ✱ Stretch: Pass the request id to the policy lookup as a header and see it in the lookup's own log","notes":"AI policy: tutor. Usual problems: leaving the old `runs/service.log` in place, so the check still finds the first run's personal data (delete it before the second run); binding the request id once at start instead of per request; a span opened but the lookup awaited outside it. Solution: `labs/solutions/S3_2.py`.","minutes":null,"lo":[]},{"id":"s3","n":20,"title":"Load testing","kind":"section","session":3,"hash":"71ad3ea7","md":"#### [day3#s3] Load testing\n\n*Session 3*\n\n- Write a load test that sends realistic requests at a fixed rate\n- Run it at three rates and read percentiles, errors and throughput\n- Locate the rate at which the 95th percentile breaks the objective","notes":"","minutes":null,"lo":["LO6"]},{"id":"the-objective","n":21,"title":"Munira's objective: 95% of claims answered within 150 ms at 200 a second","kind":"content","session":3,"hash":"df9d4ae5","md":"#### [day3#the-objective] Munira's objective: 95% of claims answered within 150 ms at 200 a second\n\n*The objective*\n\n- **150 ms** 95th percentile, measured by the caller\n- **200 / s** the peak after a sandstorm or a flood\n- **1%** most errors allowed\n\nWritten in `../data/objective.json` by the owner of the service, before anyone measured anything.","notes":"The objective belongs to the business, not to the engineers: Munira decided what a claims handler can wait for at the worst hour. \"Measured by the caller\" matters: the service's own histogram leaves out the network and the queue in front of it, so the load test measures from outside.","minutes":null,"lo":["LO6"]},{"id":"open-closed","n":22,"title":"Real callers do not wait for each other: test with an open load","kind":"content","session":3,"hash":"6290e22c","md":"#### [day3#open-closed] Real callers do not wait for each other: test with an open load\n\n*Two kinds of load*\n\n- **Closed.** N users, each sends the next request after the last answer. When Farz slows, the test sends less, and the queue a real caller meets never forms.\n- **Open.** Requests leave on a schedule, 200 a second, whatever the answers do. A slowdown shows as a queue and a higher percentile.\n\n> **What goes wrong.** A closed test reports good percentiles exactly when the service is overloaded.","notes":"Gil Tene called the closed-loop bias \"coordinated omission\". `tools/loadtest.py` is open: requests leave on schedule from a thread pool. Locust with `constant_throughput(1)` per user is open only while each answer takes under a second; k6's constant-arrival-rate executor is open. On the course's Windows laptops Locust itself added latency, so the lab uses the course's tool and keeps Locust as an option.","minutes":null,"lo":["LO6"]},{"id":"realistic-requests","n":23,"title":"One claim a hundred times a second is not Farz's traffic","kind":"content","session":3,"hash":"6aa19ffd","md":"#### [day3#realistic-requests] One claim a hundred times a second is not Farz's traffic\n\n*Lab 3.3 · step 2*\n\n|  | loadtest/one_claim.csv | ../data/replay/week1.csv |\n| --- | --- | --- |\n| Claims | one motor claim | 3,000 claims: motor, health, property |\n| Calls the policy lookup | never | about 7% of claims |\n| What its 95th percentile measures | the fast path only | the path a claims handler waits on |","notes":"The supplied load test sends one claim, so it never meets the slow path that session 2's trace found. The fix is one argument: `--file ../data/replay/week1.csv`. Ask the room what else a realistic load test needs: the mix of lines and channels, the size of the descriptions, and the rate of the peak hour.","minutes":null,"lo":["LO6"]},{"id":"warm-up-rates","n":24,"title":"Warm up, then hold each rate long enough to count its tail","kind":"content","session":3,"hash":"45f165f3","md":"#### [day3#warm-up-rates] Warm up, then hold each rate long enough to count its tail\n\n*Running it*\n\n```bash\n# file: terminal\nuv run python tools/loadtest.py --rates 80 150 220 --seconds 20 --warmup 3 \\\n  --file ../data/replay/week1.csv --label \"1 worker\" --out runs/load.json\n```\n\n- The warm-up is not counted: first connections and caches are not the steady state\n- 20 s at 150 a second is 3,000 requests: 150 of them are in the slowest 5%\n- Choose rates so that one holds the objective and one breaks it","notes":"A 99th percentile from 200 requests is two requests: hold the rate longer before you quote it. The rates on the slide are those of the course's solution; on a slower laptop choose lower ones. Close other programs: a load generator and a service on one laptop compete for the same processors.","minutes":null,"lo":["LO6"]},{"id":"the-knee","n":25,"title":"Latency stays flat, then rises sharply: that bend is the capacity","kind":"content","session":3,"hash":"0b4575af","md":"#### [day3#the-knee] Latency stays flat, then rises sharply: that bend is the capacity\n\n*Reading the result*\n\n1. **Below the knee** p95 set by the slow path, about 120 to 130 ms\n2. **At the knee** requests start to queue; p95 climbs past 150 ms\n3. **Above it** the achieved rate stops following the target\n\n> **Read three columns.** The 95th percentile, the error ratio, and whether the achieved rate kept up with the target.","notes":"In the course's final run one worker held the objective at 120 a second (95th percentile 129 ms) and broke it at 160 (262 ms); an earlier quiet run put the knee near 160. Later runs on the same laptop, shared with other heavy jobs, held the objective only at 40 a second, and the achieved rate stopped near 85: show participants that a load test measures the machine too, and that capacity must be measured on the hardware that will serve.","minutes":null,"lo":["LO6"]},{"id":"check-load","n":26,"title":"What did this load test miss?","kind":"quiz","session":3,"hash":"93e831f6","md":"#### [day3#check-load] What did this load test miss?\n\n*Checkpoint*\n\n**Question:** A team load-tests the fraud-review service with 50 users, each sending the next request when the last answer arrives. The 95th percentile stays at 40 ms while the service's own histogram shows 400 ms in the same minute. What explains it?\n\n- A. A closed load: users waited for slow answers, so fewer requests were sent and timed exactly when it slowed\n- B. The network between the test and the service\n- C. The test had no warm-up\n- D. The histogram buckets are too wide","notes":"Answer: A. Ask how to fix it: an open load at a fixed rate, or at least many more users each with a fixed throughput, and compare with the service's histogram.","minutes":null,"lo":["LO6"]},{"id":"lab-3-3","n":27,"title":"Three rates against the objective","kind":"lab","session":3,"hash":"d723cfca","md":"#### [day3#lab-3-3] Three rates against the objective\n\nLab 3.3 · 25 min\n\nRun a load test at three request rates and find where latency breaks the objective.\n\n[D3_3_load_test.html](https://sdaiaacademy.github.io/ae-205/labs/D3_3_load_test.html)\n\n- [ ] Read the objective and the locust file (4 min)\n- [ ] Make the requests realistic (5 min)\n- [ ] Run three rates with a warm-up (10 min)\n- [ ] Report where the objective breaks; check (6 min)\n- [ ] ✱ Stretch: Run the same rates with k6 and compare the two tools' numbers","notes":"AI policy: tutor. Usual problems: a server started with `--reload`, which halves throughput; using `localhost` on Windows, which can add about 200 ms per connection while it tries IPv6 first (use `127.0.0.1`); rates too high for the laptop, so nothing holds. Solution: `labs/solutions/S3_3.py`.","minutes":null,"lo":[]},{"id":"s4","n":28,"title":"Sizing and cost","kind":"section","session":4,"hash":"bd6feb3f","md":"#### [day3#s4] Sizing and cost\n\n*Session 4*\n\n- Measure the rate one worker carries within the objective\n- Choose workers and replicas for a target rate with headroom\n- Compute the cost per 1,000 predictions of a configuration","notes":"","minutes":null,"lo":["LO6"]},{"id":"workers-replicas","n":29,"title":"Workers share a container; replicas are containers of their own","kind":"content","session":4,"hash":"5268318e","md":"#### [day3#workers-replicas] Workers share a container; replicas are containers of their own\n\n*Two ways to add capacity*\n\n- **Workers.** `uvicorn --workers 2`: two Python processes in one container. Each holds its own copy of the model; together they use more than one processor.\n- **Replicas.** `replicas: 3`: three pods, which the cluster can place on different nodes and replace one at a time.\n\n> **One process per processor is the usual start.** Python runs one thread of Python code at a time per process, so a CPU-bound service scales with processes.","notes":"One more setting matters: `OMP_NUM_THREADS=1`, set in `rifd/__init__.py`. In the course's run, without it, farz 1.2.0's gradient boosting started a thread per core for every one-row prediction and took about 2 s per request on a busy laptop; with it, about 45 ms. The note is about CPython's global interpreter lock; free-threaded builds exist but the libraries Farz uses are not tested on them in this course. On a cluster, many teams run one worker per pod and scale replicas, so the cluster sees each process; lab 3.4 measures both ways on one laptop. Autoscaling on the right signal and accelerators are the subject of AE-307, which follows this course.","minutes":null,"lo":["LO6"]},{"id":"headroom","n":30,"title":"Run each replica below its measured capacity, and keep one spare","kind":"content","session":4,"hash":"58824108","md":"#### [day3#headroom] Run each replica below its measured capacity, and keep one spare\n\n*From capacity to replicas*\n\n```python\n# file: tools/sizing.py\ndef replicas_needed(target_rps, capacity_rps, headroom, spare=1):\n    return math.ceil(target_rps / (capacity_rps * (1 - headroom))) + spare\n```\n\n> **Headroom 30%.** A replica measured at 160 a second is planned at 112: bursts and a noisy neighbour stay inside the objective.\n\n> **One spare.** A rolling update or a lost node takes one replica away without breaking the objective.","notes":"Worked example with the quiet-run capacity: ceil(200 / 112) = 2, plus one spare: 3 replicas of one worker. Headroom and spares are Rifd's choices in the case study, written in the lab, not universal numbers. Ask: what would you change if the peak lasted only ten minutes a month?","minutes":null,"lo":["LO6"]},{"id":"cost-per-1000","n":31,"title":"Cost per 1,000 predictions makes two configurations comparable","kind":"content","session":4,"hash":"dda339de","md":"#### [day3#cost-per-1000] Cost per 1,000 predictions makes two configurations comparable\n\n*The price of a prediction*\n\n| Rifd's price sheet | SAR an hour |\n| --- | --- |\n| 1 vCPU | 0.19 |\n| 1 GiB of memory | 0.025 |\n| 1 GPU | 7.40 |\n\nThree replicas of one worker (1 vCPU, 0.25 GiB each): 3 × 0.19625 = **SAR 0.589 an hour**.\n\n200 a second is 720,000 predictions an hour: **SAR 0.00082 per 1,000**.","notes":"The prices are invented for the course and labelled so in the data. The sheet prices what a replica reserves (its CPU and memory requests), not what it happens to use, which is how the quote Rifd was given works. The arithmetic is the point: cost per hour divided by thousands of predictions per hour. Participants compute it for their own configurations in the lab.","minutes":null,"lo":["LO6"]},{"id":"cpu-or-gpu","n":32,"title":"For Farz, a graphics processor would cost over twelve times more and help nothing","kind":"content","session":4,"hash":"4be1a7a7","md":"#### [day3#cpu-or-gpu] For Farz, a graphics processor would cost over twelve times more and help nothing\n\n*Processor or graphics processor?*\n\n**SAR 0.0103** per 1,000 predictions on one GPU replica alone, at 200 a second\n\n- The model takes about a millisecond; the slow path is a 120 ms wait for another system\n- A logistic regression on ten features has little to run in parallel\n- Graphics processors pay off for large neural networks and batches","notes":"7.40 / (200 × 3.6) = 0.0103 SAR per 1,000, against about 0.0008 for three CPU replicas: over twelve times more, before counting that one replica has no spare. The lesson is the order of questions: where does the time go (the trace), what does it cost (the sheet), then which hardware. AE-401 covers serving large language models, where the answer differs.","minutes":null,"lo":["LO6"]},{"id":"check-sizing","n":33,"title":"How many replicas?","kind":"quiz","session":4,"hash":"3728e6a8","md":"#### [day3#check-sizing] How many replicas?\n\n*Checkpoint*\n\n**Question:** One replica of the fraud-review service holds its objective up to 60 requests a second. The target is 150 a second. The team plans 20% headroom and one spare replica. How many replicas does it need?\n\n- A. 4\n- B. 5\n- C. 6\n- D. 3","notes":"Answer: B. Option A is two different mistakes that land on the same number: without headroom 150 / 60 rounds up to 3, plus the spare is 4; with headroom but no spare it is also 4. Ask which of the two mistakes is worse during a rolling update.","minutes":null,"lo":["LO6"]},{"id":"lab-3-4","n":34,"title":"Workers, replicas and cost","kind":"lab","session":4,"hash":"c49cb11f","md":"#### [day3#lab-3-4] Workers, replicas and cost\n\nLab 3.4 · 25 min\n\nTune workers and replicas to meet the latency objective and compute cost per 1,000 predictions.\n\n[D3_4_sizing_cost.html](https://sdaiaacademy.github.io/ae-205/labs/D3_4_sizing_cost.html)\n\n- [ ] Measure one, two and four workers at the target rate (10 min)\n- [ ] Choose workers and replicas with headroom (6 min)\n- [ ] Compute cost per 1,000 predictions (5 min)\n- [ ] Check (4 min)\n- [ ] ✱ Stretch: Price the same load on the cheapest configuration that breaks the objective and say what Munira would lose","notes":"AI policy: tutor. Usual problems: labels without the word \"worker\", which `sizing.py` needs to read the configuration; four workers on a laptop with four cores, which leaves nothing for the load generator; quoting the capacity of a run where the achieved rate did not keep up. Solution: `labs/solutions/S3_4.py`.","minutes":null,"lo":[]},{"id":"wrap-up","n":35,"title":"Three things to keep from today","kind":"content","session":4,"hash":"5500d3db","md":"#### [day3#wrap-up] Three things to keep from today\n\n*Day 3 · wrap-up*\n\n- **Measure what callers feel.** Rate, errors, a latency histogram with buckets near the objective, and the label shares.\n- **Never write what you must protect.** Log fields, not bodies; redact as a last defence; test it. Traces find the slow step.\n- **Size from a realistic open load.** Find the knee, plan below it with headroom and a spare, and price it per 1,000.","notes":"Ask each participant which of their own services has a written latency objective. Tomorrow two new versions of Farz are released as canaries: one is judged against written criteria, one is rolled back on evidence, and four weeks of claims show drift.","minutes":null,"lo":["LO5","LO6"]},{"id":"next","n":36,"title":"Day 4: release and watch","kind":"content","session":4,"hash":"0916a9e0","md":"#### [day3#next] Day 4: release and watch\n\n*Next*\n\n- A 10% canary of Farz 1.1.0, compared like with like\n- A faulty 1.2.0, rolled back within five minutes on written criteria\n- Drift in four weeks of claims, two alert rules and a runbook","notes":"Tonight: read `../data/rollback_criteria.md` and decide what you would add. Lab 4.4's alert rules are written without AI help first.","minutes":null,"lo":["LO7"]}],"activities":[{"id":"check-metrics-q1","slide":"check-metrics","type":"single","prompt":"Farz runs four replicas. Each exposes its latency histogram. The dashboard must show the 95th percentile of all triage requests in the last minute. Which query is right?","options":[{"key":"A","text":"avg of histogram_quantile(0.95, …) computed for each replica"},{"key":"B","text":"max of histogram_quantile(0.95, …) over the replicas"},{"key":"C","text":"rate of the duration sum divided by the rate of the count"},{"key":"D","text":"histogram_quantile(0.95, sum by (le) (rate(…_bucket[1m])))"}],"correct":[3],"explanation":"Bucket counts add up across replicas, so sum the rates by boundary first and estimate the percentile once.","misconceptions":["Averaging four percentiles is not the percentile of the whole: a slow replica's tail is diluted","The largest of four percentiles overstates the service's percentile","The average of the observations hides the tail the objective is about",""],"lo":["LO5"]},{"id":"check-logs-q1","slide":"check-logs","type":"single","prompt":"The fraud-review service logs each request body at debug level, and the log search tool hides the national id field in its display. A colleague says that is enough. What do you answer?","options":[{"key":"A","text":"It is enough while debug logging stays off in production"},{"key":"B","text":"It is enough, because nobody sees the field"},{"key":"C","text":"It is not: the id is already stored; stop logging the body and test that no id reaches a log"},{"key":"D","text":"Encrypt the log store and keep logging the body"}],"correct":[2],"explanation":"Data that is never written cannot leak or be misused; a display filter acts after the copy exists.","misconceptions":["Debug logs get switched on in an incident, exactly when many people read them","Hiding a field in the display leaves it stored, backed up and searchable","","Encrypting the store still keeps a copy that serves no purpose"],"lo":["LO5"]},{"id":"check-load-q1","slide":"check-load","type":"single","prompt":"A team load-tests the fraud-review service with 50 users, each sending the next request when the last answer arrives. The 95th percentile stays at 40 ms while the service's own histogram shows 400 ms in the same minute. What explains it?","options":[{"key":"A","text":"A closed load: users waited for slow answers, so fewer requests were sent and timed exactly when it slowed"},{"key":"B","text":"The network between the test and the service"},{"key":"C","text":"The test had no warm-up"},{"key":"D","text":"The histogram buckets are too wide"}],"correct":[0],"explanation":"In a closed test the callers slow down with the service, so the slow period contributes few requests and the percentile looks good.","misconceptions":["","The histogram measures inside the service; network time would make the caller's numbers larger, not smaller","A warm-up affects the first seconds, not a whole minute","Buckets make the estimate coarse, not ten times wrong in the other direction"],"lo":["LO6"]},{"id":"check-sizing-q1","slide":"check-sizing","type":"single","prompt":"One replica of the fraud-review service holds its objective up to 60 requests a second. The target is 150 a second. The team plans 20% headroom and one spare replica. How many replicas does it need?","options":[{"key":"A","text":"4"},{"key":"B","text":"5"},{"key":"C","text":"6"},{"key":"D","text":"3"}],"correct":[1],"explanation":"Each replica is planned at 60 × 0.8 = 48 a second, so 150 / 48 = 3.1, rounded up to 4, plus one spare: 5.","misconceptions":["Forgets the headroom or the spare: either one alone gives 4","","Counts the headroom as an extra replica on top of the spare","Forgets both: 150 / 60 rounds up to 3, each replica at over 80% of capacity and nothing spare"],"lo":["LO6"]}],"ai":{"context":{"course":"../context/course.md","courseJs":"../context/course.js","day":"day3.md","llms":"../llms.txt"},"tasks":[],"tools":[]},"bridge":{"allowedOrigins":[]},"features":{},"strings":{}}</script>
+<script src="../_engine/academy.js"></script>
+</body>
+</html>

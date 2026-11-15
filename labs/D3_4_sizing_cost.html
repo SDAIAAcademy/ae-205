@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-ax="lab" data-track="ai-engineering">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 3.4 · Workers, replicas and cost · Deploying AI Services: Containers, Serving and Monitoring</title>
+<meta name="generator" content="SDAIA Academy engine 1.0.0">
+<link rel="icon" href="../_engine/icon.svg">
+<link rel="alternate" type="text/markdown" href="D3_4_sizing_cost.md">
+<link rel="describedby" href="../llms.txt">
+<link rel="stylesheet" href="../_engine/academy.css">
+</head>
+<body>
+<header>
+<div class="wrap">
+<div class="top"><div class="logo"></div><nav><a href="../index.html">Course page</a><a href="../slides/day3.html#lab-3-4">Back to the slides</a></nav></div>
+<span class="tag">Lab 3.4</span>
+<h1>Workers, replicas and cost</h1>
+<p>Tune workers and replicas to meet the latency objective and compute cost per 1,000 predictions.</p>
+<div class="meta"><span>25 minutes</span><span>Day 3</span><span>Session 4: Sizing and cost</span></div>
+</div>
+</header>
+<main class="wrap">
+<article class="lab" data-lab="3.4">
+  <div class="box goal">
+    <h3>Goal</h3>
+    <p>Measure what one, two and four workers carry within the objective, choose the workers and replicas that meet 200 requests a second with headroom and a spare, and price the choice per 1,000 predictions against a graphics processor.</p>
+  </div>
+
+  <h2>What you need</h2>
+  <ul>
+    <li>The lab folder <code>rifd-labs/3.4</code>: <code>tools/sizing.py</code> with its two formulas missing, and <code>tools/loadtest.py</code> from lab 3.3</li>
+    <li><code>../data/price_sheet.json</code>: Rifd's in-Kingdom quote, SAR 0.19 a vCPU-hour, 0.025 a GiB-hour and 7.40 a GPU-hour (invented prices)</li>
+    <li>AI policy: tutor.</li>
+  </ul>
+
+  <div class="step">
+    <h3>Measure one, two and four workers at the target rate <span class="min">10 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">cd rifd-labs/3.4
+uv run uvicorn rifd.app:app --host 127.0.0.1 --port 8000 --log-level warning --workers 1 &amp;
+uv run python tools/loadtest.py --rates 120 160 200 --seconds 15 --label "1 worker" --out runs/load_w1.json
+kill %1
+# again with --workers 2 (rates 200 280 360, --label "2 workers") and --workers 4 (rates 300 400 500)</code></pre>
+    <p>Wait for <code>/readyz</code> after each start: every worker loads its own copy of the model.</p>
+  </div>
+
+  <div class="step">
+    <h3>Choose workers and replicas with headroom <span class="min">6 min</span></h3>
+    <p>In <code>tools/sizing.py</code>, write <code>replicas_needed</code>: enough replicas that each runs at most at (1 − headroom) of its measured capacity, rounded up, plus the spare. Then compare the configurations.</p>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run python tools/sizing.py runs/load_w1.json runs/load_w2.json runs/load_w4.json --out runs/sizing.json</code></pre>
+  </div>
+
+  <div class="step">
+    <h3>Compute cost per 1,000 predictions <span class="min">5 min</span></h3>
+    <p>Write <code>cost_per_1000</code>: the cost of an hour divided by the thousands of predictions in that hour at the target rate. Run <code>sizing.py</code> again and write <code>runs/sizing_note.md</code>: your choice, its cost per 1,000, and the cost of one GPU replica for comparison.</p>
+  </div>
+
+  <div class="step">
+    <h3>Check <span class="min">4 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run ../lab.py check 3.4</code></pre>
+  </div>
+
+  <div class="step stretch">
+    <h3>✱ Stretch</h3>
+    <p>Price the same load on the cheapest configuration that breaks the objective and say what Munira would lose.</p>
+  </div>
+
+  <h2>Check yourself</h2>
+  <ol class="checks">
+    <li>Did two workers carry twice what one did? If not, what took the rest?</li>
+    <li>Why do you plan replicas from the measured capacity minus headroom, not from the capacity itself?</li>
+    <li>What would make a graphics processor the right choice for a model at Rifd?</li>
+  </ol>
+
+  <details class="instructor">
+    <summary>For the trainer</summary>
+    <p>The check tests the two formulas on reference values (200 a second at a capacity of 150 with 30% headroom is 3 replicas; SAR 0.6075 an hour at 200 a second is SAR 0.000844 per 1,000) and asks for a comparison of at least two configurations with a choice and a note. With the quiet-run capacity of about 160 a second for one worker, the plan is 3 replicas of one worker, SAR 0.589 an hour, about SAR 0.00082 per 1,000; one GPU replica alone costs about SAR 0.0103 per 1,000 at the same rate.</p>
+    <p>In the course's final run the highest rates tried that held the objective were 120 a second for one worker, 200 for two and 300 for four; <code>sizing.py</code> then gave 4, 3 and 2 replicas, at SAR 0.00109, 0.00164 and 0.00218 per 1,000, and chose four replicas of one worker. An earlier run on the same laptop while other heavy jobs ran gave capacities of 40 and 80 and none for four workers. The capacities depend on the laptop and on what else runs on it; on a shared machine the load generator takes processors from the workers, and four workers can carry less than two. Rehearse it on a room machine. Answers: the load generator and the operating system share the processors, and Python processes do not scale perfectly; headroom absorbs bursts and slower neighbours; a model whose computation dominates and parallelises, such as a large neural network served in batches. Solution: <code>labs/solutions/S3_4.py</code>.</p>
+  </details>
+</article>
+<nav class="pager"><a href="D3_3_load_test.html" rel="prev">← Previous lab</a><a href="D4_1_canary.html" rel="next">Next lab →</a></nav>
+</main>
+<footer><div class="wrap">SDAIA Academy · AI Engineering Track · Deploying AI Services: Containers, Serving and Monitoring<br><span class="muted">Course version 2027.1.0 · engine 1.0.0 · built 2026-11-15 · commit fec8449</span></div></footer>
+<script type="application/json" id="academy-data">{"v":1,"engine":"1.0.0","build":{"at":"2026-11-15T09:27:24Z","version":"2027.1.0","commit":"fec8449"},"course":{"id":"ae-205","code":"AE-205","title":"Deploying AI Services: Containers, Serving and Monitoring","track":"ai-engineering","lang":"en","dir":"ltr","url":"https://sdaiaacademy.github.io/ae-205/","repo":"SDAIAAcademy/ae-205","home":"../index.html"},"lab":{"id":"3.4","title":"Workers, replicas and cost","summary":"Tune workers and replicas to meet the latency objective and compute cost per 1,000 predictions.","minutes":25,"day":3,"unit":"Day 3","session":4,"deck":"../slides/day3.html#lab-3-4","prev":"D3_3_load_test.html","next":"D4_1_canary.html","alt":{}},"ai":{"context":{"course":"../context/course.md","courseJs":"../context/course.js","day":null,"llms":"../llms.txt"},"tasks":[],"tools":[]},"features":{},"strings":{}}</script>
+<script src="../_engine/academy.js"></script>
+</body>
+</html>

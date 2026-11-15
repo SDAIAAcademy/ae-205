@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-ax="lab" data-track="ai-engineering">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 2.1 · A multi-stage container file · Deploying AI Services: Containers, Serving and Monitoring</title>
+<meta name="generator" content="SDAIA Academy engine 1.0.0">
+<link rel="icon" href="../_engine/icon.svg">
+<link rel="alternate" type="text/markdown" href="D2_1_multi_stage_image.md">
+<link rel="describedby" href="../llms.txt">
+<link rel="stylesheet" href="../_engine/academy.css">
+</head>
+<body>
+<header>
+<div class="wrap">
+<div class="top"><div class="logo"></div><nav><a href="../index.html">Course page</a><a href="../slides/day2.html#lab-2-1">Back to the slides</a></nav></div>
+<span class="tag">Lab 2.1</span>
+<h1>A multi-stage container file</h1>
+<p>Write a multi-stage container file and compare its size and build time with a naive one.</p>
+<div class="meta"><span>25 minutes</span><span>Day 2</span><span>Session 1: Images that are small and reproducible</span></div>
+</div>
+</header>
+<main class="wrap">
+<article class="lab" data-lab="2.1">
+  <div class="box goal">
+    <h3>Goal</h3>
+    <p>Package Farz and Shabih in one image that is small, built from the lock file, runs as a non-root user and rebuilds in seconds after a code change. Compare it with the naive container file the team wrote first.</p>
+  </div>
+
+  <h2>What you need</h2>
+  <ul>
+    <li>The lab folder <code>rifd-labs/2.1</code>, with <code>Dockerfile.naive</code> and no <code>Dockerfile</code> yet</li>
+    <li>A container runtime: Docker Desktop, Docker Engine or Podman (<code>podman build</code> takes the same file). Without one, write the file and let the check review it</li>
+    <li>AI policy: off for the first attempt at the container file. Write it yourself, then compare with an assistant's version if you want to.</li>
+  </ul>
+
+  <div class="step">
+    <h3>Build the naive image; record size and time <span class="min">5 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">cd rifd-labs/2.1
+time docker build -f Dockerfile.naive -t rifd/claims:naive .
+docker image ls rifd/claims</code></pre>
+    <p>Write the size and the build time down. Then change one line in <code>src/rifd/app.py</code> (a comment is enough), build again and watch which steps run.</p>
+  </div>
+
+  <div class="step">
+    <h3>Write the multi-stage file without AI help <span class="min">10 min</span></h3>
+    <p>Write <code>Dockerfile</code> with two stages. The build stage starts from <code>python:3.12-slim</code>, copies <code>uv</code> from <code>ghcr.io/astral-sh/uv:0.13.5</code>, copies <code>pyproject.toml</code> and <code>uv.lock</code> before the code and runs <code>uv sync --frozen --no-dev</code>. The runtime stage starts again from the slim base, copies only the virtual environment, the code and the models, and switches to a user with id 10001. Write <code>.dockerignore</code> so that <code>.venv</code>, <code>tests</code>, <code>notebook</code> and <code>secrets</code> never reach the build.</p>
+  </div>
+
+  <div class="step">
+    <h3>Build it; record size, time and a rebuild after a code change <span class="min">6 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">time docker build -t rifd/claims:1.0.0 .
+docker image ls rifd/claims
+docker run --rm -p 8000:8000 rifd/claims:1.0.0   # then: curl 127.0.0.1:8000/readyz</code></pre>
+    <p>Change the same line again and rebuild: only the layers after <code>COPY src</code> should run.</p>
+  </div>
+
+  <div class="step">
+    <h3>Check <span class="min">4 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run ../lab.py check 2.1</code></pre>
+  </div>
+
+  <div class="step stretch">
+    <h3>✱ Stretch</h3>
+    <p>Pin the base image by digest and rebuild twice: do the two images have the same id?</p>
+  </div>
+
+  <h2>Check yourself</h2>
+  <ol class="checks">
+    <li>Which line of your file decides whether a code change reinstalls the dependencies?</li>
+    <li>What does the runtime stage leave behind that the naive image carries?</li>
+    <li>Why does <code>secrets</code> belong in <code>.dockerignore</code> even though no line copies it by name?</li>
+  </ol>
+
+  <details class="instructor">
+    <summary>For the trainer</summary>
+    <p>The check reviews the file for two stages, pinned bases, an install from the lock without development tools, a <code>USER</code> line, no <code>COPY .</code> in the runtime stage and no secret in <code>ENV</code> or <code>ARG</code>; with a runtime it also asks that <code>rifd/claims:1.0.0</code> is under 500 MB. On the naive file it reports four findings: no install from the lock, development tools in the image, root, and <code>COPY .</code>.</p>
+    <p>The course's run had no container daemon, so the image sizes and build times were not measured for this page: have a trainer build both images on the room's machines before the course and put the numbers on the lab slide. Expect the naive image to be several times larger, mostly the full Debian base and the development dependencies. Answers: the <code>COPY pyproject.toml uv.lock</code> line before <code>COPY src</code>; build tools, caches, tests, the notebook and the dev group; a later <code>COPY .</code> would sweep the folder in. Solution: <code>labs/solutions/S2_1.py</code>.</p>
+  </details>
+</article>
+<nav class="pager"><a href="D1_4_health_readiness.html" rel="prev">← Previous lab</a><a href="D2_2_scan_and_config.html" rel="next">Next lab →</a></nav>
+</main>
+<footer><div class="wrap">SDAIA Academy · AI Engineering Track · Deploying AI Services: Containers, Serving and Monitoring<br><span class="muted">Course version 2027.1.0 · engine 1.0.0 · built 2026-11-15 · commit fec8449</span></div></footer>
+<script type="application/json" id="academy-data">{"v":1,"engine":"1.0.0","build":{"at":"2026-11-15T09:27:24Z","version":"2027.1.0","commit":"fec8449"},"course":{"id":"ae-205","code":"AE-205","title":"Deploying AI Services: Containers, Serving and Monitoring","track":"ai-engineering","lang":"en","dir":"ltr","url":"https://sdaiaacademy.github.io/ae-205/","repo":"SDAIAAcademy/ae-205","home":"../index.html"},"lab":{"id":"2.1","title":"A multi-stage container file","summary":"Write a multi-stage container file and compare its size and build time with a naive one.","minutes":25,"day":2,"unit":"Day 2","session":1,"deck":"../slides/day2.html#lab-2-1","prev":"D1_4_health_readiness.html","next":"D2_2_scan_and_config.html","alt":{}},"ai":{"context":{"course":"../context/course.md","courseJs":"../context/course.js","day":null,"llms":"../llms.txt"},"tasks":[],"tools":[]},"features":{},"strings":{}}</script>
+<script src="../_engine/academy.js"></script>
+</body>
+</html>

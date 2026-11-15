@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-ax="deck" data-track="ai-engineering">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Day 4 · Release and watch · Deploying AI Services: Containers, Serving and Monitoring</title>
+<meta name="generator" content="SDAIA Academy engine 1.0.0">
+<link rel="icon" href="../_engine/icon.svg">
+<link rel="alternate" type="text/markdown" href="day4.md">
+<link rel="describedby" href="../llms.txt">
+<link rel="stylesheet" href="../_engine/academy.css">
+</head>
+<body>
+<div class="deck" data-course="Deploying AI Services: Containers, Serving and Monitoring" data-track="ai-engineering" data-day="Day 4">
+<section class="slide title" id="title" data-auto="title" data-label="Welcome" data-n="1">
+  <div class="kicker">SDAIA Academy · Deploying AI Services: Containers, Serving and Monitoring</div>
+  <h1>Release and watch</h1>
+  <p class="lead mt">Day 4: Release a new version on evidence, roll back a bad one, watch the inputs drift and hand over to the on-call engineer</p>
+  <div class="meta"><span class="track">AI Engineering Track</span><span>4 teaching days + capstone day</span><span>4 sessions · 4 labs</span><span>AE-205</span></div>
+  <aside class="notes"><p>Last teaching day. Ask the room: when did your team last undo a release, and how long did the decision take? Today Farz meets the hardest part of serving: changing it safely while it runs, and noticing when the world changes under it.</p><p>Labs 4.1 and 4.2 run three processes each; remind participants to stop them at the end of each lab. Lab 4.4 closes with the choice of capstone model.</p></aside>
+</section>
+
+<section class="slide" id="agenda" data-auto="agenda" data-label="Agenda" data-n="2">
+  <div class="kicker">Today</div>
+  <h2>Release and watch</h2>
+  <div class="agenda"><div class="item"><div><b>Session 1 · Rolling, canary and shadow releases</b><small>Blue-green, rolling, canary and shadow releases, and comparing a canary with the current version on the same metrics</small></div></div><div class="item"><div><b>Session 2 · Rollback on evidence</b><small>Rollback criteria written before the release, who decides, rolling back first and diagnosing second</small></div></div><div class="item"><div><b>Session 3 · Drift in replayed traffic</b><small>Data drift and concept drift, distribution tests and population stability, delayed labels and when drift should start a retraining</small></div></div><div class="item"><div><b>Session 4 · Alerts and a runbook</b><small>Alerts on symptoms the caller feels, durations that stop flapping, a runbook the on-call engineer can follow and the person who decides a rollback</small></div></div></div>
+</section>
+
+<!-- Session 1 -->
+
+<section class="slide section" id="s1" data-auto="section" data-session="1" data-n="3">
+  <div class="kicker">Session 1</div>
+  <h1>Rolling, canary and shadow releases</h1>
+  <ul class="bullets outcomes"><li>Choose a release strategy for a change and its risk</li><li>Send a fixed share of traffic to a new version</li><li>Compare two versions on errors, latency and predictions</li></ul>
+  <div class="sess-no">01</div>
+</section>
+
+<section class="slide" id="strategies" data-lo="LO7" data-n="4" data-session="1">
+  <div class="kicker">Release strategies</div>
+  <h2>Four ways to put a new version in front of callers</h2>
+  <table class="t small">
+    <tr><th>Strategy</th><th>What callers get</th><th>Answers the question</th></tr>
+    <tr><td>Rolling</td><td>pods replaced one at a time; all traffic moves in minutes</td><td>does it start and stay ready?</td></tr>
+    <tr><td>Blue-green</td><td>a full second copy; one switch moves everything, one switch back</td><td>can we undo in seconds?</td></tr>
+    <tr class="hl"><td>Canary</td><td>a small share, say 10%, then more if it holds</td><td>is it better, or at least no worse, on real traffic?</td></tr>
+    <tr><td>Shadow</td><td>none: a copy of each request goes to it and its answer is thrown away</td><td>how would it behave, with no caller at risk?</td></tr>
+  </table>
+  <aside class="notes"><p>Day 2's rolling update answers only the first question. A model release needs the third: whether its predictions are acceptable, which no probe can tell. Shadow is the choice when even 10% of claims is too much risk, for example a model that changes who gets investigated.</p></aside>
+</section>
+
+<section class="slide" id="choose-by-risk" data-lo="LO7" data-n="5" data-session="1">
+  <div class="kicker">Choosing</div>
+  <h2>Choose the strategy from what could go wrong, and for whom</h2>
+  <div class="cols cols-2 gap-s">
+    <div class="card c-teal"><h4>A fix to logging</h4><p class="small mb0">No change in predictions: a rolling update, watched by the probes.</p></div>
+    <div class="card c-cyan"><h4>Farz 1.1.0, a new algorithm</h4><p class="small mb0">Predictions change a little: a 10% canary with written criteria.</p></div>
+    <div class="card c-amber"><h4>A new decision rule</h4><p class="small mb0">Who gets investigated changes: shadow first, then a canary.</p></div>
+    <div class="card c-coral"><h4>A new contract version</h4><p class="small mb0">Callers must change too: a new path, <code>/v2/</code>, beside the old one.</p></div>
+  </div>
+  <aside class="notes"><p>The fourth case returns to Day 1: the path carries the contract version, so a breaking change to the contract never ships as a model release. Ask participants to place a release of their own team on this grid.</p></aside>
+</section>
+
+<section class="slide" id="router" data-lo="LO7" data-n="6" data-session="1">
+  <div class="kicker">Lab 4.1 · the router</div>
+  <h2>A hash of the claim id decides which version answers</h2>
+  <pre class="code s" data-file="tools/router.py"><code class="language-python"><span class="hljs-keyword">def</span> <span class="hljs-title function_">to_canary</span>(<span class="hljs-params">claim_id: <span class="hljs-built_in">str</span></span>) -&gt; <span class="hljs-built_in">bool</span>:
+    bucket = <span class="hljs-built_in">int</span>(hashlib.sha256(claim_id.encode()).hexdigest()[:<span class="hljs-number">8</span>], <span class="hljs-number">16</span>) % <span class="hljs-number">10000</span>
+    <span class="hljs-keyword">return</span> bucket &lt; STATE[<span class="hljs-string">&quot;weight&quot;</span>] * <span class="hljs-number">10000</span></code></pre>
+  <ul class="bullets small mt">
+    <li>The same claim always reaches the same version: a retry never gets a second opinion</li>
+    <li><code>POST /admin/weight</code> changes the share at once and records when and why</li>
+    <li>On a cluster: two Deployments behind one Service in the ratio you want, or a weighted route of a gateway or service mesh</li>
+  </ul>
+  <aside class="notes"><p>A random split would send a retried claim to either version, so one claim could be triaged twice with different labels. Gateways such as the Kubernetes Gateway API's weighted routes, Istio or Argo Rollouts do this split in production; the course's router keeps it visible in thirty lines.</p></aside>
+</section>
+
+<section class="slide" id="like-with-like" data-lo="LO7" data-n="7" data-session="1">
+  <div class="kicker">Comparing</div>
+  <h2>Compare the two versions on the same hour of the same traffic</h2>
+  <div class="cols cols-2">
+    <ul class="bullets small">
+      <li><b>Errors</b>: the share of 5xx answers of each version</li>
+      <li><b>Latency</b>: the 95th percentile of each, measured by the caller</li>
+      <li><b>Label shares</b>: fast track, standard, investigate</li>
+      <li><b>Agreement</b> with the delayed labels that have arrived</li>
+    </ul>
+    <div class="callout warn"><b>What goes wrong.</b> Comparing the canary with last week's dashboard: the traffic of a Thursday after a storm is not the traffic of a quiet Sunday.</div>
+  </div>
+  <aside class="notes"><p><code>tools/compare.py</code> groups the replay's answers by the version that gave them. Agreement needs labels, which arrive weeks later; week 1's labels have arrived in the case study, so lab 4.1 can use them. In production that means a canary's accuracy is judged long after its errors and latency.</p></aside>
+</section>
+
+<section class="slide" id="check-strategy" data-lo="LO7" data-n="8" data-session="1">
+  <div class="kicker">Checkpoint</div>
+  <h2>Which release strategy?</h2>
+  <div class="quiz" data-type="single" data-lo="LO7" data-id="check-strategy-q1">
+    <p class="lead">The fraud team has a new model that changes which claims are referred to investigators. The head of the team will not let any claim be referred by it until she has seen a week of its decisions on real claims. What do you propose?</p>
+    <div class="opts">
+      <div class="opt" data-why="Even 10% of claims would be referred by the new model" data-k="A">A 10% canary for a week</div>
+      <div class="opt" data-why="A rolling update moves every claim to the new model within minutes" data-k="B">A rolling update with readiness probes</div>
+      <div class="opt" data-ok data-k="C">A shadow release for a week: copy each request to it and keep only the current model's answer</div>
+      <div class="opt" data-why="Blue-green switches all traffic at once; the undo is fast but claims were referred" data-k="D">Blue-green with a switch back if anything looks wrong</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> Only shadow traffic shows the new model's decisions on real claims while no claim is decided by it.</div>
+  </div>
+  <aside class="notes"><p>Answer: C. Then ask what the shadow costs: a second copy of the compute, and a store for its answers, which carries the same personal data rules as the service.</p></aside>
+</section>
+
+<section class="slide lab top" id="lab-4-1" data-auto="lab" data-lab="4.1" data-label="Lab 4.1" data-n="9" data-session="1">
+  <div class="cols cols-2 mid"><div><div class="lab-tag">Lab 4.1 · 25 min</div><h2>A 10% canary</h2><p class="lead small">Send 10% of traffic to a new version and compare its metrics with the current one.</p><a class="nb" href="../labs/D4_1_canary.html">D4_1_canary.html</a></div><ul class="checklist"><li>Start both versions and the router <span class="min">5 min</span></li><li>Replay claims with 10% to the canary <span class="min">7 min</span></li><li>Compare errors, latency and predictions <span class="min">8 min</span></li><li>Write the release log entry; check <span class="min">5 min</span></li><li class="stretch">✱ Stretch: Run 1.1.0 in shadow instead: copy every request to it, return only 1.0.0's answer, and compare</li></ul></div>
+  <aside class="notes"><p>AI policy: tutor. Usual problems: both servers started on the same model folder; the replay sent to a server's port instead of the router's (every answer then comes from one version); judging before 200 canary requests. Stop the three servers at the end. Solution: <code>labs/solutions/S4_1.py</code>.</p></aside>
+</section>
+
+<!-- Session 2 -->
+
+<section class="slide section" id="s2" data-auto="section" data-session="2" data-n="10">
+  <div class="kicker">Session 2</div>
+  <h1>Rollback on evidence</h1>
+  <ul class="bullets outcomes"><li>Apply written rollback criteria to a canary's metrics</li><li>Roll back within a time limit and record the evidence</li><li>Name the person accountable for the decision</li></ul>
+  <div class="sess-no">02</div>
+</section>
+
+<section class="slide" id="written-criteria" data-lo="LO7" data-n="11" data-session="2">
+  <div class="kicker">Rollback criteria</div>
+  <h2>Write the criteria before the release, while nobody is attached to it</h2>
+  <div class="cols cols-2">
+    <div>
+      <p class="small">Judge only after <b>200</b> canary requests. Roll back when any one holds:</p>
+      <ol class="bullets small">
+        <li>Errors (500 or 503) above <b>1%</b></li>
+        <li>95th percentile above <b>150 ms</b></li>
+        <li>Any label share more than <b>10 points</b> from the current version's</li>
+      </ol>
+    </div>
+    <div class="card c-amber tint"><h4>Munira Al-Ajmi</h4><p class="small mb0">Wrote them, decides, and is accountable. The on-call engineer executes, and rolls back first when one fires.</p></div>
+  </div>
+  <aside class="notes"><p>From <code>../data/rollback_criteria.md</code>. The third criterion is the one an ordinary web service does not have. Ask the room why the minimum of 200 requests matters: with 30 canary requests, one slow health claim moves the 95th percentile on its own.</p></aside>
+</section>
+
+<section class="slide" id="who-decides" data-lo="LO7" data-n="12" data-session="2">
+  <div class="kicker">Accountability</div>
+  <h2>One named person decides; the criteria let anyone act at once</h2>
+  <div class="flow">
+    <div class="step c-coral"><b>1 · A criterion fires</b>the watch prints which one</div>
+    <div class="arrow">→</div>
+    <div class="step c-amber"><b>2 · Roll back</b>the on-call engineer sets the share to 0</div>
+    <div class="arrow">→</div>
+    <div class="step c-teal"><b>3 · Tell</b>Munira, with the evidence files</div>
+    <div class="arrow">→</div>
+    <div class="step c-navy"><b>4 · Diagnose</b>after traffic is safe</div>
+  </div>
+  <div class="callout tip mt"><b>Roll back first, diagnose second.</b> Every minute spent finding the cause is a minute of claims triaged by a faulty version.</div>
+  <aside class="notes"><p>SDAIA's AI Ethics Principles ask that responsibility for an AI system's outcomes is assigned to people; a runbook that names Munira does that for this decision. The order on the slide is the order of lab 4.2, where the check measures the seconds between the start of the release and share 0.</p></aside>
+</section>
+
+<section class="slide" id="faulty-release" data-lo="LO7" data-n="13" data-session="2">
+  <div class="kicker">Lab 4.2</div>
+  <h2>Farz 1.2.0 answers fast, without errors, and sends too many claims to investigate</h2>
+  <div class="cols cols-3">
+    <div class="stat center"><div class="big">18%</div><div class="lbl">investigate share of 1.1.0</div></div>
+    <div class="stat center"><div class="big">38%</div><div class="lbl">investigate share of the 1.2.0 canary</div></div>
+    <div class="stat center"><div class="big">40 s</div><div class="lbl">from the release to share 0</div></div>
+  </div>
+  <div class="callout warn mt"><b>What goes wrong.</b> A dashboard of errors and latency stays green the whole time.</div>
+  <aside class="notes"><p>From the course's final run of lab 4.2: the watch fired at 210 canary requests, on the label criteria only (no errors, 95th percentile 142 ms); the standard share also fell from 43% to 24%. Errors and latency alone would have kept 1.2.0 in service. On an earlier run with the laptop overloaded, the latency criterion fired too.</p></aside>
+</section>
+
+<section class="slide" id="find-the-cause" data-lo="LO7 LO2" data-n="14" data-session="2">
+  <div class="kicker">Diagnose second</div>
+  <h2>The model file is fine; the decision rule beside it is not</h2>
+  <div class="cols cols-2">
+    <pre class="code s" data-file="models/farz-1.1.0/metadata.json"><code class="language-json"><span class="hljs-attr">&quot;decision&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;investigate_threshold&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">0.3</span><span class="hljs-punctuation">}</span></code></pre>
+    <pre class="code s" data-file="models/farz-1.2.0/metadata.json"><code class="language-json"><span class="hljs-attr">&quot;decision&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;investigate_threshold&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">0.05</span><span class="hljs-punctuation">}</span></code></pre>
+  </div>
+  <p class="small mt">Day 1 put the decision rule into the artefact so that it travels with the model. That also means a release can change behaviour without changing a single weight.</p>
+  <aside class="notes"><p>The planted fault. Ask how it could have been caught before the release: a test that compares the label shares of a new artefact with the current one on a fixed set of claims, or a review of the metadata diff. Both belong in the capstone's pipeline.</p></aside>
+</section>
+
+<section class="slide" id="evidence" data-lo="LO7" data-n="15" data-session="2">
+  <div class="kicker">The record</div>
+  <h2>A release log entry is the evidence an auditor will ask for</h2>
+  <table class="t small">
+    <tr><th>Row</th><th>Comes from</th></tr>
+    <tr><td>Canary requests judged, error ratio, p95, label shares</td><td><code>runs/compare.json</code></td></tr>
+    <tr><td>Seconds from the release to share 0, and the reason</td><td><code>runs/router_events.jsonl</code></td></tr>
+    <tr><td>Every answer after the rollback came from 1.1.0</td><td><code>runs/after_rollback.jsonl</code></td></tr>
+    <tr class="hl"><td>Cause, decided by, accountable</td><td>the metadata diff, and the runbook</td></tr>
+  </table>
+  <aside class="notes"><p>Each row names a file, so the entry can be checked rather than believed. The capstone asks for one recorded canary and one recorded rollback with the same evidence.</p></aside>
+</section>
+
+<section class="slide" id="check-rollback" data-lo="LO7" data-n="16" data-session="2">
+  <div class="kicker">Checkpoint</div>
+  <h2>What does the on-call engineer do now?</h2>
+  <div class="quiz" data-type="single" data-lo="LO7" data-id="check-rollback-q1">
+    <p class="lead">At <time>02:10</time> a canary has served 350 requests. Errors and latency are normal, but its investigate share is 14 points above the current version's. Munira's criteria say more than 10 points means roll back. Munira is asleep. What should the engineer do?</p>
+    <div class="opts">
+      <div class="opt" data-ok data-k="A">Set the canary's share to 0 now, then tell Munira with the evidence</div>
+      <div class="opt" data-why="Waiting leaves claims triaged by a version that already broke a written criterion" data-k="B">Wait for Munira to decide in the morning</div>
+      <div class="opt" data-why="The criterion is about the labels; healthy errors and latency do not cancel it" data-k="C">Keep the canary, since errors and latency are normal</div>
+      <div class="opt" data-why="Diagnosing first keeps the faulty version serving while the cause is found" data-k="D">Find the cause first, then decide</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> The criteria were written so that the person on call can act at once; the accountable person is told, with the evidence.</div>
+  </div>
+  <aside class="notes"><p>Answer: A. If someone picks B, ask what the criteria are for if they do not allow action at <time>02:10</time>. Accountability stays with Munira; execution does not wait for her.</p></aside>
+</section>
+
+<section class="slide lab top" id="lab-4-2" data-auto="lab" data-lab="4.2" data-label="Lab 4.2" data-n="17" data-session="2">
+  <div class="cols cols-2 mid"><div><div class="lab-tag">Lab 4.2 · 25 min</div><h2>Roll back a faulty version</h2><p class="lead small">Trigger the rollback criteria with a seeded faulty version and roll back within five minutes.</p><a class="nb" href="../labs/D4_2_rollback.html">D4_2_rollback.html</a></div><ul class="checklist"><li>Read the criteria; start the canary of 1.2.0 <span class="min">5 min</span></li><li>Watch until a criterion fires <span class="min">6 min</span></li><li>Roll back and time it <span class="min">5 min</span></li><li>Find the cause; write the release log <span class="min">6 min</span></li><li>Check <span class="min">3 min</span></li><li class="stretch">✱ Stretch: Do the same rollback on the cluster with kubectl rollout undo and compare the time</li></ul></div>
+  <aside class="notes"><p>AI policy: tutor. Usual problems: the replay stopped before the canary reached 200 requests, so nothing fires; a rollback event without a reason; forgetting to replay after the rollback, which the check needs to prove every answer comes from 1.1.0. Solution: <code>labs/solutions/S4_2.py</code>.</p></aside>
+</section>
+
+<!-- Session 3 -->
+
+<section class="slide section" id="s3" data-auto="section" data-session="3" data-n="18">
+  <div class="kicker">Session 3</div>
+  <h1>Drift in replayed traffic</h1>
+  <ul class="bullets outcomes"><li>Compute a drift statistic per feature against the training data</li><li>Name the shifted features and rule out a noisy one</li><li>Say what delayed labels allow you to conclude, and when</li></ul>
+  <div class="sess-no">03</div>
+</section>
+
+<section class="slide" id="two-drifts" data-lo="LO7" data-n="19" data-session="3">
+  <div class="kicker">Drift</div>
+  <h2>The inputs can change, or what they mean can change</h2>
+  <div class="cols cols-2">
+    <div class="card c-teal flat"><h4>Data drift</h4><p class="small mb0">The distribution of the inputs moves: more claims through the app, larger motor amounts. Visible the day it happens.</p></div>
+    <div class="card c-coral flat"><h4>Concept drift</h4><p class="small mb0">The link between inputs and the right label moves: the same claim should now be triaged differently. Visible only when the labels arrive.</p></div>
+  </div>
+  <div class="callout note mt"><b>Rifd's labels arrive about two weeks after a claim.</b> In week 4, weeks 1 and 2 are labelled; weeks 3 and 4 are not.</div>
+  <aside class="notes"><p>Data drift does not always hurt a model, and concept drift can happen with no data drift at all. Ask the room for an example of each in insurance: a new app channel (data), and a new fraud pattern with the same claim profile (concept).</p></aside>
+</section>
+
+<section class="slide" id="psi" data-lo="LO7" data-n="20" data-session="3">
+  <div class="kicker">Population stability index</div>
+  <h2>PSI adds up how much each bin's share moved, weighted by how far</h2>
+  <pre class="code s" data-file="tools/drift.py"><code class="language-python"><span class="hljs-keyword">def</span> <span class="hljs-title function_">psi_from_shares</span>(<span class="hljs-params">expected, actual</span>):
+    e = np.clip(expected, EPS, <span class="hljs-literal">None</span>)
+    a = np.clip(actual, EPS, <span class="hljs-literal">None</span>)
+    <span class="hljs-keyword">return</span> <span class="hljs-built_in">float</span>(np.<span class="hljs-built_in">sum</span>((a - e) * np.log(a / e)))</code></pre>
+  <div class="cols cols-3 mt">
+    <div class="stat center"><div class="big">&lt; 0.1</div><div class="lbl">stable</div></div>
+    <div class="stat center"><div class="big">0.1 – 0.25</div><div class="lbl">watch</div></div>
+    <div class="stat center"><div class="big">≥ 0.25</div><div class="lbl">shifted</div></div>
+  </div>
+  <aside class="notes"><p>Bins are the training data's deciles for a number, its categories for a category. The clip keeps an empty bin from dividing by zero, which is lab 4.3's exercise. The thresholds are a rule of thumb from credit scoring, adopted as Rifd's policy in the case study; they are not a standard, and a team should agree its own.</p></aside>
+</section>
+
+<section class="slide" id="ks-decoy" data-lo="LO7" data-n="21" data-session="3">
+  <div class="kicker">Significant is not large</div>
+  <h2>A p-value says a move is not chance; PSI says whether it matters</h2>
+  <table class="t small">
+    <tr><th>Week 3</th><th>KS p-value</th><th>PSI</th><th>Verdict</th></tr>
+    <tr><td>policy tenure</td><td>0.041</td><td>0.013</td><td>moved about a month: negligible</td></tr>
+    <tr class="hl"><td>channel</td><td>(category)</td><td>0.277</td><td>shifted</td></tr>
+    <tr><td>amount, all lines</td><td>9e-32</td><td>0.075</td><td>stable when pooled</td></tr>
+  </table>
+  <p class="small mt">With 3,000 claims a week, a tiny move can be significant. Report it, then say it does not matter.</p>
+  <aside class="notes"><p>Real numbers of the course's run. By week 4 the tenure p-value was 0.48: the decoy is at the edge of what 3,000 claims can detect. The amount's p-value is tiny and its pooled PSI small: the next slide shows why both are true.</p></aside>
+</section>
+
+<section class="slide" id="by-segment" data-lo="LO7" data-n="22" data-session="3">
+  <div class="kicker">Lab 4.3 · by line of business</div>
+  <h2>Pooled over all lines the amount looks stable; motor amounts shifted</h2>
+  <div class="cols cols-3">
+    <div class="stat center"><div class="big">0.064</div><div class="lbl">amount PSI, all lines, week 4</div></div>
+    <div class="stat center"><div class="big">0.290</div><div class="lbl">motor claims only</div></div>
+    <div class="stat center"><div class="big">0.010 · 0.035</div><div class="lbl">health · property</div></div>
+  </div>
+  <div class="callout tip mt"><b>Compute drift where the model behaves differently.</b> A shift in a minority segment disappears in the pooled number.</div>
+  <aside class="notes"><p>From <code>tools/drift.py --by line</code> in the course's run; week 3 had motor amounts at 0.353. The planted change multiplied motor amounts by 1.6 from week 3. Channel shifted in every line (0.23 to 0.30 in week 4), which is why it also shows pooled.</p></aside>
+</section>
+
+<section class="slide" id="what-labels-say" data-lo="LO7" data-n="23" data-session="3">
+  <div class="kicker">What Rifd can conclude</div>
+  <h2>The predictions moved at once; whether they are wrong waits for labels</h2>
+  <table class="t small">
+    <tr><th>Week</th><th>Investigate share of Farz 1.0.0</th><th>Agreement with delayed labels</th></tr>
+    <tr><td>1</td><td>20%</td><td>73.0%</td></tr>
+    <tr><td>2</td><td>19%</td><td>74.6%</td></tr>
+    <tr class="hl"><td>3</td><td>26%</td><td>not yet known</td></tr>
+    <tr class="hl"><td>4</td><td>26%</td><td>not yet known</td></tr>
+  </table>
+  <div class="callout tip mt"><b>The retraining trigger.</b> Drift in the inputs starts a closer watch; agreement with the labels falling below an agreed level starts a retraining.</div>
+  <aside class="notes"><p>From the course's replay of the four weeks through Farz 1.0.0. The rise in investigations follows the inputs (larger motor amounts) and may be right: bigger claims may deserve a look. That is the honest report: data drift is certain, its effect on accuracy is unknown for two more weeks, and the retraining trigger is agreement falling once the labels arrive.</p></aside>
+</section>
+
+<section class="slide" id="check-drift" data-lo="LO7" data-n="24" data-session="3">
+  <div class="kicker">Checkpoint</div>
+  <h2>What should the drift report say?</h2>
+  <div class="quiz" data-type="single" data-lo="LO7" data-id="check-drift-q1">
+    <p class="lead">In week 3, the region mix has a PSI of 0.02. Customer age has a KS p-value of 0.001 and a PSI of 0.03. The channel has a PSI of 0.31. Labels for week 3 arrive in two weeks. Which summary is right?</p>
+    <div class="opts">
+      <div class="opt" data-why="A significant p-value with a tiny PSI is a small move, not a shift" data-k="A">Age and channel shifted; the model is degrading</div>
+      <div class="opt" data-why="Input drift says nothing yet about accuracy; that needs the labels" data-k="B">Channel shifted, so accuracy has fallen and the model must be retrained now</div>
+      <div class="opt" data-why="One feature far above the threshold is a shift, whatever the others do" data-k="C">Nothing shifted: two of three features are stable</div>
+      <div class="opt" data-ok data-k="D">Channel shifted; age moved slightly and does not matter; accuracy is unknown until the labels arrive</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> Name the large shift, set aside the significant but tiny move, and say what the missing labels leave open.</div>
+  </div>
+  <aside class="notes"><p>Answer: D. This is the shape of the drift report participants write in lab 4.3; the check also refuses a report that calls tenure shifted.</p></aside>
+</section>
+
+<section class="slide lab top" id="lab-4-3" data-auto="lab" data-lab="4.3" data-label="Lab 4.3" data-n="25" data-session="3">
+  <div class="cols cols-2 mid"><div><div class="lab-tag">Lab 4.3 · 25 min</div><h2>Drift in four weeks</h2><p class="lead small">Replay four weeks of claims, compute a drift statistic per feature and name the shifted ones.</p><a class="nb" href="../labs/D4_3_drift.html">D4_3_drift.html</a></div><ul class="checklist"><li>Replay the four weeks through the service <span class="min">5 min</span></li><li>Compute population stability and a KS test per feature <span class="min">9 min</span></li><li>Name the shifted features; check the labels you have <span class="min">7 min</span></li><li>Write the drift report; check <span class="min">4 min</span></li><li class="stretch">✱ Stretch: Recompute the statistics with Evidently and compare its verdicts with yours</li></ul></div>
+  <aside class="notes"><p>AI policy: tutor. Usual problems: <code>np.log</code> of zero when the clip is forgotten; computing PSI on the replay weeks against each other instead of the training data; reading only the pooled numbers. On a slow laptop the four replays take several minutes at the requested rate; start them before explaining PSI. Solution: <code>labs/solutions/S4_3.py</code>.</p></aside>
+</section>
+
+<!-- Session 4 -->
+
+<section class="slide section" id="s4" data-auto="section" data-session="4" data-n="26">
+  <div class="kicker">Session 4</div>
+  <h1>Alerts and a runbook</h1>
+  <ul class="bullets outcomes"><li>Write an alert rule on error ratio and one on latency</li><li>Test both rules against a recorded error spike</li><li>Write a one-page runbook with the accountable person</li></ul>
+  <div class="sess-no">04</div>
+</section>
+
+<section class="slide" id="symptom-alerts" data-lo="LO5" data-n="27" data-session="4">
+  <div class="kicker">Alerts</div>
+  <h2>Alert on what callers feel, not on everything that can be measured</h2>
+  <div class="cols cols-2">
+    <div class="card c-teal flat"><h4>Page someone</h4><ul class="bullets small mb0"><li>errors above 1% for two minutes</li><li>95th percentile above 150 ms for five minutes</li></ul></div>
+    <div class="card c-navy flat"><h4>Put on a dashboard</h4><ul class="bullets small mb0"><li>CPU of one pod</li><li>one slow request</li><li>a label share moving slowly: a weekly drift report</li></ul></div>
+  </div>
+  <div class="callout warn mt"><b>What goes wrong.</b> An alert that fires and resolves by itself every few hours trains the on-call engineer to ignore it.</div>
+  <aside class="notes"><p>Symptom-based alerting follows the Google SRE book's advice: page on what users experience and keep causes for dashboards. The label-share criterion is for releases, where the comparison is clear; slow movement of the shares belongs to the drift report.</p></aside>
+</section>
+
+<section class="slide" id="alert-rule" data-lo="LO5" data-n="28" data-session="4">
+  <div class="kicker">A rule</div>
+  <h2>An expression, a duration, a severity and a runbook link</h2>
+  <pre class="code s" data-file="monitoring/alerts.yml"><code class="language-yaml"><span class="hljs-bullet">-</span> <span class="hljs-attr">alert:</span> <span class="hljs-string">FarzLatencyP95High</span>
+  <span class="hljs-attr">expr:</span> <span class="hljs-string">histogram_quantile(0.95,</span> <span class="hljs-string">sum</span> <span class="hljs-string">by</span> <span class="hljs-string">(le)</span> <span class="hljs-string">(rate(rifd_request_duration_seconds_bucket{route=&quot;/v1/triage&quot;}[5m])))</span> <span class="hljs-string">&gt;</span> <span class="hljs-number">0.15</span>
+  <span class="hljs-attr">for:</span> <span class="hljs-string">5m</span>
+  <span class="hljs-attr">labels:</span> {<span class="hljs-attr">severity:</span> <span class="hljs-string">page</span>}
+  <span class="hljs-attr">annotations:</span>
+    <span class="hljs-attr">summary:</span> <span class="hljs-string">The</span> <span class="hljs-string">95th-percentile</span> <span class="hljs-string">triage</span> <span class="hljs-string">latency</span> <span class="hljs-string">is</span> <span class="hljs-string">above</span> <span class="hljs-string">the</span> <span class="hljs-number">150</span> <span class="hljs-string">ms</span> <span class="hljs-string">objective</span>
+    <span class="hljs-attr">runbook_url:</span> <span class="hljs-string">RUNBOOK.md#latency</span></code></pre>
+  <aside class="notes"><p>Prometheus' rule format, which <code>promlite</code> reads too. The expression is the dashboard's query with a threshold; <code>for:</code> asks that it holds at every evaluation for five minutes before the alert fires. Participants write both rules without AI help first in lab 4.4.</p></aside>
+</section>
+
+<section class="slide" id="test-on-recording" data-lo="LO5" data-n="29" data-session="4">
+  <div class="kicker">Lab 4.4 · testing the rules</div>
+  <h2>Test alerts on a recording, before they wake anyone</h2>
+  <table class="t small">
+    <tr><th>Rules</th><th>Blip at minute 6</th><th>Errors, minutes 12 to 18</th><th>Latency from minute 22</th></tr>
+    <tr class="hl"><td>Reference: errors 1m, for 2m; latency 5m, for 5m</td><td>quiet</td><td>fires 14.0 to 18.8</td><td>fires from 28.0</td></tr>
+    <tr><td>Same, no <code>for:</code></td><td>quiet</td><td>fires from 12.0</td><td>fires from 23.0</td></tr>
+    <tr><td>Latency over 1m, no <code>for:</code></td><td>fires 6.0 to 7.8</td><td>unchanged rule: 14.0 to 18.8</td><td>fires from 22.0</td></tr>
+  </table>
+  <aside class="notes"><p>From the course's run of <code>promlite rules</code> on <code>spike.jsonl</code>, 30 minutes scraped every 15 seconds. In the third row only the latency rule changed. Adding <code>for: 2m</code> to that 1-minute rule silenced the blip again and fired from minute 24.0. Both the window and the duration buy quiet with delay; choose them from what Munira can tolerate. <code>promtool test rules</code> does the same for real Prometheus.</p></aside>
+</section>
+
+<section class="slide" id="runbook" data-lo="LO5 LO7" data-n="30" data-session="4">
+  <div class="kicker">The runbook</div>
+  <h2>One page the on-call engineer can follow in the middle of the night</h2>
+  <div class="cols cols-2">
+    <ul class="bullets small">
+      <li><b>Accountable for a rollback decision:</b> Munira Al-Ajmi</li>
+      <li>For each alert: what the caller sees, the first three checks</li>
+      <li>When to roll back, and the exact command</li>
+      <li>Who to tell: Munira, the platform channel, Bassam if personal data may have leaked</li>
+    </ul>
+    <div class="card c-amber tint"><h4>Linked from the alert</h4><p class="small mb0"><code>runbook_url: RUNBOOK.md#errors</code>: the page opens from the notification.</p></div>
+  </div>
+  <aside class="notes"><p>The check refuses a runbook without an accountable name. Ask: who in your organisation is named in a runbook as accountable for a model's decisions? Often nobody, which is the gap this slide is about.</p></aside>
+</section>
+
+<section class="slide" id="choose-capstone" data-lo="LO1" data-n="31" data-session="4">
+  <div class="kicker">Tomorrow</div>
+  <h2>Choose the model you will take to a monitored service</h2>
+  <div class="cols cols-3">
+    <div class="card c-teal"><h4>Farz</h4><p class="small mb0">The course's model, with every artefact you built this week.</p></div>
+    <div class="card c-cyan"><h4>Shabih</h4><p class="small mb0">The similar-claims model, with its own memory, start-up and release questions.</p></div>
+    <div class="card c-purple"><h4>Your own</h4><p class="small mb0">A model from your work, with synthetic or public data only.</p></div>
+  </div>
+  <p class="small mt">Write the choice, the reason and the objective you will defend in <code>CAPSTONE.md</code>.</p>
+  <aside class="notes"><p>Remind participants that their own model must use no real personal data in a public repository. The defence is eight minutes and four minutes of questions, and the assessor injects a fault during it.</p></aside>
+</section>
+
+<section class="slide" id="check-alerts" data-lo="LO5" data-n="32" data-session="4">
+  <div class="kicker">Checkpoint</div>
+  <h2>Why does this alert flap?</h2>
+  <div class="quiz" data-type="single" data-lo="LO5" data-id="check-alerts-q1">
+    <p class="lead">An alert on the 95th-percentile latency uses a 30-second rate window and no for: duration. It fires for a minute about twice a day and resolves by itself. Callers never complain. What is the best first change?</p>
+    <div class="opts">
+      <div class="opt" data-why="The objective is the threshold; moving it hides real breaches" data-k="A">Raise the threshold to 300 ms</div>
+      <div class="opt" data-ok data-k="B">Lengthen the window and add a for: duration, then test on a recording</div>
+      <div class="opt" data-why="An alert nobody acts on is worse than none, whoever receives it" data-k="C">Send it to a wider group</div>
+      <div class="opt" data-why="Deleting it leaves sustained breaches unseen" data-k="D">Delete the alert</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> A short window and no duration react to blips; a longer window and a duration fire only on sustained breaches, which the recording can prove.</div>
+  </div>
+  <aside class="notes"><p>Answer: B. Then ask what the change costs: a slower alert. The recording shows how much slower.</p></aside>
+</section>
+
+<section class="slide lab top" id="lab-4-4" data-auto="lab" data-lab="4.4" data-label="Lab 4.4" data-n="33" data-session="4">
+  <div class="cols cols-2 mid"><div><div class="lab-tag">Lab 4.4 · 25 min</div><h2>Two alerts and a runbook</h2><p class="lead small">Write two alert rules and a one-page runbook for the on-call engineer, then choose the capstone model.</p><a class="nb" href="../labs/D4_4_alerts_runbook.html">D4_4_alerts_runbook.html</a></div><ul class="checklist"><li>Write the two rules without AI help <span class="min">8 min</span></li><li>Test them on the recorded spike <span class="min">6 min</span></li><li>Write the one-page runbook <span class="min">8 min</span></li><li>Choose the capstone model; check <span class="min">3 min</span></li><li class="stretch">✱ Stretch: Add a burn-rate alert on the error objective over two windows and test it on the same recording</li></ul></div>
+  <aside class="notes"><p>AI policy: off for the first attempt at the two rules. Usual problems: YAML indentation; <code>status=~"5.."</code> written with single quotes; a threshold of 150 instead of 0.15 (the histogram is in seconds); a runbook without an accountable name. Solution: <code>labs/solutions/S4_4.py</code>.</p></aside>
+</section>
+
+<section class="slide" id="wrap-up" data-lo="LO7 LO5" data-n="34" data-session="4">
+  <div class="kicker">Day 4 · wrap-up</div>
+  <h2>Three things to keep from the course</h2>
+  <div class="cols cols-3">
+    <div class="card c-teal"><h4>Release on evidence</h4><p class="small mb0">A canary against written criteria, compared like with like, and a log entry with its files.</p></div>
+    <div class="card c-cyan"><h4>Roll back first</h4><p class="small mb0">A named person is accountable; the criteria let the person on call act at once.</p></div>
+    <div class="card c-coral"><h4>Watch inputs, wait for labels</h4><p class="small mb0">Drift by segment, significant is not large, and alerts tested before they page.</p></div>
+  </div>
+  <aside class="notes"><p>Ask each participant which of the three their team would adopt first. Retraining pipelines and online evaluation, which today only named as triggers, are the subject of AE-305. Tomorrow is the capstone: build, defend, and recover from the fault the assessor injects.</p></aside>
+</section>
+
+<section class="slide dark" id="next" data-lo="LO1" data-n="35" data-session="4">
+  <div class="kicker">Next</div>
+  <h2>Day 5: the capstone</h2>
+  <ul class="bullets">
+    <li>Bring your <code>CAPSTONE.md</code> and a public GitHub repository with the service, its container file and manifests</li>
+    <li>Dashboard and alerts as code, a load test against your objective, a recorded canary and rollback, a drift check</li>
+    <li>Eight minutes to defend, four minutes of questions, one injected fault</li>
+  </ul>
+  <aside class="notes"><p>Give the rubric now (20/20/20/15/25) so that nobody meets it for the first time tomorrow. The capstone deck has the details.</p></aside>
+</section>
+</div>
+<script type="application/json" id="academy-data">{"v":1,"engine":"1.0.0","build":{"at":"2026-11-15T09:27:24Z","version":"2027.1.0","commit":"fec8449"},"course":{"id":"ae-205","code":"AE-205","title":"Deploying AI Services: Containers, Serving and Monitoring","track":"ai-engineering","lang":"en","dir":"ltr","url":"https://sdaiaacademy.github.io/ae-205/","repo":"SDAIAAcademy/ae-205","home":"../index.html"},"deck":{"id":"day4","kind":"day","day":4,"label":"Day 4","title":"Release and watch","prev":"day3.html","next":"capstone.html","md":"day4.md","alt":{}},"sessions":[{"n":1,"label":"Session 1","title":"Rolling, canary and shadow releases","slide":"s1","outcomes":["Choose a release strategy for a change and its risk","Send a fixed share of traffic to a new version","Compare two versions on errors, latency and predictions"],"minutes":50,"lab":{"id":"4.1","title":"A 10% canary","minutes":25,"href":"../labs/D4_1_canary.html"}},{"n":2,"label":"Session 2","title":"Rollback on evidence","slide":"s2","outcomes":["Apply written rollback criteria to a canary's metrics","Roll back within a time limit and record the evidence","Name the person accountable for the decision"],"minutes":50,"lab":{"id":"4.2","title":"Roll back a faulty version","minutes":25,"href":"../labs/D4_2_rollback.html"}},{"n":3,"label":"Session 3","title":"Drift in replayed traffic","slide":"s3","outcomes":["Compute a drift statistic per feature against the training data","Name the shifted features and rule out a noisy one","Say what delayed labels allow you to conclude, and when"],"minutes":50,"lab":{"id":"4.3","title":"Drift in four weeks","minutes":25,"href":"../labs/D4_3_drift.html"}},{"n":4,"label":"Session 4","title":"Alerts and a runbook","slide":"s4","outcomes":["Write an alert rule on error ratio and one on latency","Test both rules against a recorded error spike","Write a one-page runbook with the accountable person"],"minutes":50,"lab":{"id":"4.4","title":"Two alerts and a runbook","minutes":25,"href":"../labs/D4_4_alerts_runbook.html"}}],"slides":[{"id":"title","n":1,"title":"Release and watch","kind":"title","session":0,"hash":"b82bef84","md":"#### [day4#title] Release and watch\n\n*SDAIA Academy · Deploying AI Services: Containers, Serving and Monitoring*\n\nDay 4: Release a new version on evidence, roll back a bad one, watch the inputs drift and hand over to the on-call engineer\n\nAI Engineering Track · 4 teaching days + capstone day · 4 sessions · 4 labs · AE-205","notes":"Last teaching day. Ask the room: when did your team last undo a release, and how long did the decision take? Today Farz meets the hardest part of serving: changing it safely while it runs, and noticing when the world changes under it.\n\nLabs 4.1 and 4.2 run three processes each; remind participants to stop them at the end of each lab. Lab 4.4 closes with the choice of capstone model.","minutes":null,"lo":[]},{"id":"agenda","n":2,"title":"Release and watch","kind":"content","session":0,"hash":"bcc7dcc6","md":"#### [day4#agenda] Release and watch\n\n*Today*\n\n- **Session 1 · Rolling, canary and shadow releases**: Blue-green, rolling, canary and shadow releases, and comparing a canary with the current version on the same metrics\n- **Session 2 · Rollback on evidence**: Rollback criteria written before the release, who decides, rolling back first and diagnosing second\n- **Session 3 · Drift in replayed traffic**: Data drift and concept drift, distribution tests and population stability, delayed labels and when drift should start a retraining\n- **Session 4 · Alerts and a runbook**: Alerts on symptoms the caller feels, durations that stop flapping, a runbook the on-call engineer can follow and the person who decides a rollback","notes":"","minutes":null,"lo":[]},{"id":"s1","n":3,"title":"Rolling, canary and shadow releases","kind":"section","session":1,"hash":"b24de196","md":"#### [day4#s1] Rolling, canary and shadow releases\n\n*Session 1*\n\n- Choose a release strategy for a change and its risk\n- Send a fixed share of traffic to a new version\n- Compare two versions on errors, latency and predictions","notes":"","minutes":null,"lo":["LO7"]},{"id":"strategies","n":4,"title":"Four ways to put a new version in front of callers","kind":"content","session":1,"hash":"c60f34e0","md":"#### [day4#strategies] Four ways to put a new version in front of callers\n\n*Release strategies*\n\n| Strategy | What callers get | Answers the question |\n| --- | --- | --- |\n| Rolling | pods replaced one at a time; all traffic moves in minutes | does it start and stay ready? |\n| Blue-green | a full second copy; one switch moves everything, one switch back | can we undo in seconds? |\n| Canary | a small share, say 10%, then more if it holds | is it better, or at least no worse, on real traffic? |\n| Shadow | none: a copy of each request goes to it and its answer is thrown away | how would it behave, with no caller at risk? |","notes":"Day 2's rolling update answers only the first question. A model release needs the third: whether its predictions are acceptable, which no probe can tell. Shadow is the choice when even 10% of claims is too much risk, for example a model that changes who gets investigated.","minutes":null,"lo":["LO7"]},{"id":"choose-by-risk","n":5,"title":"Choose the strategy from what could go wrong, and for whom","kind":"content","session":1,"hash":"0cbcb728","md":"#### [day4#choose-by-risk] Choose the strategy from what could go wrong, and for whom\n\n*Choosing*\n\n- **A fix to logging.** No change in predictions: a rolling update, watched by the probes.\n- **Farz 1.1.0, a new algorithm.** Predictions change a little: a 10% canary with written criteria.\n- **A new decision rule.** Who gets investigated changes: shadow first, then a canary.\n- **A new contract version.** Callers must change too: a new path, `/v2/`, beside the old one.","notes":"The fourth case returns to Day 1: the path carries the contract version, so a breaking change to the contract never ships as a model release. Ask participants to place a release of their own team on this grid.","minutes":null,"lo":["LO7"]},{"id":"router","n":6,"title":"A hash of the claim id decides which version answers","kind":"content","session":1,"hash":"c6d7a35e","md":"#### [day4#router] A hash of the claim id decides which version answers\n\n*Lab 4.1 · the router*\n\n```python\n# file: tools/router.py\ndef to_canary(claim_id: str) -> bool:\n    bucket = int(hashlib.sha256(claim_id.encode()).hexdigest()[:8], 16) % 10000\n    return bucket \u003c STATE[\"weight\"] * 10000\n```\n\n- The same claim always reaches the same version: a retry never gets a second opinion\n- `POST /admin/weight` changes the share at once and records when and why\n- On a cluster: two Deployments behind one Service in the ratio you want, or a weighted route of a gateway or service mesh","notes":"A random split would send a retried claim to either version, so one claim could be triaged twice with different labels. Gateways such as the Kubernetes Gateway API's weighted routes, Istio or Argo Rollouts do this split in production; the course's router keeps it visible in thirty lines.","minutes":null,"lo":["LO7"]},{"id":"like-with-like","n":7,"title":"Compare the two versions on the same hour of the same traffic","kind":"content","session":1,"hash":"8d9d5a4e","md":"#### [day4#like-with-like] Compare the two versions on the same hour of the same traffic\n\n*Comparing*\n\n- **Errors**: the share of 5xx answers of each version\n- **Latency**: the 95th percentile of each, measured by the caller\n- **Label shares**: fast track, standard, investigate\n- **Agreement** with the delayed labels that have arrived\n\n> **What goes wrong.** Comparing the canary with last week's dashboard: the traffic of a Thursday after a storm is not the traffic of a quiet Sunday.","notes":"`tools/compare.py` groups the replay's answers by the version that gave them. Agreement needs labels, which arrive weeks later; week 1's labels have arrived in the case study, so lab 4.1 can use them. In production that means a canary's accuracy is judged long after its errors and latency.","minutes":null,"lo":["LO7"]},{"id":"check-strategy","n":8,"title":"Which release strategy?","kind":"quiz","session":1,"hash":"2a14be1b","md":"#### [day4#check-strategy] Which release strategy?\n\n*Checkpoint*\n\n**Question:** The fraud team has a new model that changes which claims are referred to investigators. The head of the team will not let any claim be referred by it until she has seen a week of its decisions on real claims. What do you propose?\n\n- A. A 10% canary for a week\n- B. A rolling update with readiness probes\n- C. A shadow release for a week: copy each request to it and keep only the current model's answer\n- D. Blue-green with a switch back if anything looks wrong","notes":"Answer: C. Then ask what the shadow costs: a second copy of the compute, and a store for its answers, which carries the same personal data rules as the service.","minutes":null,"lo":["LO7"]},{"id":"lab-4-1","n":9,"title":"A 10% canary","kind":"lab","session":1,"hash":"d92d77f8","md":"#### [day4#lab-4-1] A 10% canary\n\nLab 4.1 · 25 min\n\nSend 10% of traffic to a new version and compare its metrics with the current one.\n\n[D4_1_canary.html](https://sdaiaacademy.github.io/ae-205/labs/D4_1_canary.html)\n\n- [ ] Start both versions and the router (5 min)\n- [ ] Replay claims with 10% to the canary (7 min)\n- [ ] Compare errors, latency and predictions (8 min)\n- [ ] Write the release log entry; check (5 min)\n- [ ] ✱ Stretch: Run 1.1.0 in shadow instead: copy every request to it, return only 1.0.0's answer, and compare","notes":"AI policy: tutor. Usual problems: both servers started on the same model folder; the replay sent to a server's port instead of the router's (every answer then comes from one version); judging before 200 canary requests. Stop the three servers at the end. Solution: `labs/solutions/S4_1.py`.","minutes":null,"lo":[]},{"id":"s2","n":10,"title":"Rollback on evidence","kind":"section","session":2,"hash":"d709c432","md":"#### [day4#s2] Rollback on evidence\n\n*Session 2*\n\n- Apply written rollback criteria to a canary's metrics\n- Roll back within a time limit and record the evidence\n- Name the person accountable for the decision","notes":"","minutes":null,"lo":["LO7"]},{"id":"written-criteria","n":11,"title":"Write the criteria before the release, while nobody is attached to it","kind":"content","session":2,"hash":"bc68f105","md":"#### [day4#written-criteria] Write the criteria before the release, while nobody is attached to it\n\n*Rollback criteria*\n\nJudge only after **200** canary requests. Roll back when any one holds:\n\n1. Errors (500 or 503) above **1%**\n2. 95th percentile above **150 ms**\n3. Any label share more than **10 points** from the current version's\n\n- **Munira Al-Ajmi.** Wrote them, decides, and is accountable. The on-call engineer executes, and rolls back first when one fires.","notes":"From `../data/rollback_criteria.md`. The third criterion is the one an ordinary web service does not have. Ask the room why the minimum of 200 requests matters: with 30 canary requests, one slow health claim moves the 95th percentile on its own.","minutes":null,"lo":["LO7"]},{"id":"who-decides","n":12,"title":"One named person decides; the criteria let anyone act at once","kind":"content","session":2,"hash":"1197d423","md":"#### [day4#who-decides] One named person decides; the criteria let anyone act at once\n\n*Accountability*\n\n1. **1 · A criterion fires** the watch prints which one\n2. **2 · Roll back** the on-call engineer sets the share to 0\n3. **3 · Tell** Munira, with the evidence files\n4. **4 · Diagnose** after traffic is safe\n\n> **Roll back first, diagnose second.** Every minute spent finding the cause is a minute of claims triaged by a faulty version.","notes":"SDAIA's AI Ethics Principles ask that responsibility for an AI system's outcomes is assigned to people; a runbook that names Munira does that for this decision. The order on the slide is the order of lab 4.2, where the check measures the seconds between the start of the release and share 0.","minutes":null,"lo":["LO7"]},{"id":"faulty-release","n":13,"title":"Farz 1.2.0 answers fast, without errors, and sends too many claims to investigate","kind":"content","session":2,"hash":"85e70d9a","md":"#### [day4#faulty-release] Farz 1.2.0 answers fast, without errors, and sends too many claims to investigate\n\n*Lab 4.2*\n\n- **18%** investigate share of 1.1.0\n- **38%** investigate share of the 1.2.0 canary\n- **40 s** from the release to share 0\n\n> **What goes wrong.** A dashboard of errors and latency stays green the whole time.","notes":"From the course's final run of lab 4.2: the watch fired at 210 canary requests, on the label criteria only (no errors, 95th percentile 142 ms); the standard share also fell from 43% to 24%. Errors and latency alone would have kept 1.2.0 in service. On an earlier run with the laptop overloaded, the latency criterion fired too.","minutes":null,"lo":["LO7"]},{"id":"find-the-cause","n":14,"title":"The model file is fine; the decision rule beside it is not","kind":"content","session":2,"hash":"7325e98d","md":"#### [day4#find-the-cause] The model file is fine; the decision rule beside it is not\n\n*Diagnose second*\n\n```json\n// file: models/farz-1.1.0/metadata.json\n\"decision\": {\"investigate_threshold\": 0.3}\n```\n\n```json\n// file: models/farz-1.2.0/metadata.json\n\"decision\": {\"investigate_threshold\": 0.05}\n```\n\nDay 1 put the decision rule into the artefact so that it travels with the model. That also means a release can change behaviour without changing a single weight.","notes":"The planted fault. Ask how it could have been caught before the release: a test that compares the label shares of a new artefact with the current one on a fixed set of claims, or a review of the metadata diff. Both belong in the capstone's pipeline.","minutes":null,"lo":["LO7","LO2"]},{"id":"evidence","n":15,"title":"A release log entry is the evidence an auditor will ask for","kind":"content","session":2,"hash":"d4007366","md":"#### [day4#evidence] A release log entry is the evidence an auditor will ask for\n\n*The record*\n\n| Row | Comes from |\n| --- | --- |\n| Canary requests judged, error ratio, p95, label shares | `runs/compare.json` |\n| Seconds from the release to share 0, and the reason | `runs/router_events.jsonl` |\n| Every answer after the rollback came from 1.1.0 | `runs/after_rollback.jsonl` |\n| Cause, decided by, accountable | the metadata diff, and the runbook |","notes":"Each row names a file, so the entry can be checked rather than believed. The capstone asks for one recorded canary and one recorded rollback with the same evidence.","minutes":null,"lo":["LO7"]},{"id":"check-rollback","n":16,"title":"What does the on-call engineer do now?","kind":"quiz","session":2,"hash":"7d3b9598","md":"#### [day4#check-rollback] What does the on-call engineer do now?\n\n*Checkpoint*\n\n**Question:** At 02:10 a canary has served 350 requests. Errors and latency are normal, but its investigate share is 14 points above the current version's. Munira's criteria say more than 10 points means roll back. Munira is asleep. What should the engineer do?\n\n- A. Set the canary's share to 0 now, then tell Munira with the evidence\n- B. Wait for Munira to decide in the morning\n- C. Keep the canary, since errors and latency are normal\n- D. Find the cause first, then decide","notes":"Answer: A. If someone picks B, ask what the criteria are for if they do not allow action at 02:10. Accountability stays with Munira; execution does not wait for her.","minutes":null,"lo":["LO7"]},{"id":"lab-4-2","n":17,"title":"Roll back a faulty version","kind":"lab","session":2,"hash":"44c63f24","md":"#### [day4#lab-4-2] Roll back a faulty version\n\nLab 4.2 · 25 min\n\nTrigger the rollback criteria with a seeded faulty version and roll back within five minutes.\n\n[D4_2_rollback.html](https://sdaiaacademy.github.io/ae-205/labs/D4_2_rollback.html)\n\n- [ ] Read the criteria; start the canary of 1.2.0 (5 min)\n- [ ] Watch until a criterion fires (6 min)\n- [ ] Roll back and time it (5 min)\n- [ ] Find the cause; write the release log (6 min)\n- [ ] Check (3 min)\n- [ ] ✱ Stretch: Do the same rollback on the cluster with kubectl rollout undo and compare the time","notes":"AI policy: tutor. Usual problems: the replay stopped before the canary reached 200 requests, so nothing fires; a rollback event without a reason; forgetting to replay after the rollback, which the check needs to prove every answer comes from 1.1.0. Solution: `labs/solutions/S4_2.py`.","minutes":null,"lo":[]},{"id":"s3","n":18,"title":"Drift in replayed traffic","kind":"section","session":3,"hash":"53da7513","md":"#### [day4#s3] Drift in replayed traffic\n\n*Session 3*\n\n- Compute a drift statistic per feature against the training data\n- Name the shifted features and rule out a noisy one\n- Say what delayed labels allow you to conclude, and when","notes":"","minutes":null,"lo":["LO7"]},{"id":"two-drifts","n":19,"title":"The inputs can change, or what they mean can change","kind":"content","session":3,"hash":"5da7f0bb","md":"#### [day4#two-drifts] The inputs can change, or what they mean can change\n\n*Drift*\n\n- **Data drift.** The distribution of the inputs moves: more claims through the app, larger motor amounts. Visible the day it happens.\n- **Concept drift.** The link between inputs and the right label moves: the same claim should now be triaged differently. Visible only when the labels arrive.\n\n> **Rifd's labels arrive about two weeks after a claim.** In week 4, weeks 1 and 2 are labelled; weeks 3 and 4 are not.","notes":"Data drift does not always hurt a model, and concept drift can happen with no data drift at all. Ask the room for an example of each in insurance: a new app channel (data), and a new fraud pattern with the same claim profile (concept).","minutes":null,"lo":["LO7"]},{"id":"psi","n":20,"title":"PSI adds up how much each bin's share moved, weighted by how far","kind":"content","session":3,"hash":"2c274e40","md":"#### [day4#psi] PSI adds up how much each bin's share moved, weighted by how far\n\n*Population stability index*\n\n```python\n# file: tools/drift.py\ndef psi_from_shares(expected, actual):\n    e = np.clip(expected, EPS, None)\n    a = np.clip(actual, EPS, None)\n    return float(np.sum((a - e) * np.log(a / e)))\n```\n\n- **\u003c 0.1** stable\n- **0.1 – 0.25** watch\n- **≥ 0.25** shifted","notes":"Bins are the training data's deciles for a number, its categories for a category. The clip keeps an empty bin from dividing by zero, which is lab 4.3's exercise. The thresholds are a rule of thumb from credit scoring, adopted as Rifd's policy in the case study; they are not a standard, and a team should agree its own.","minutes":null,"lo":["LO7"]},{"id":"ks-decoy","n":21,"title":"A p-value says a move is not chance; PSI says whether it matters","kind":"content","session":3,"hash":"e20d0791","md":"#### [day4#ks-decoy] A p-value says a move is not chance; PSI says whether it matters\n\n*Significant is not large*\n\n| Week 3 | KS p-value | PSI | Verdict |\n| --- | --- | --- | --- |\n| policy tenure | 0.041 | 0.013 | moved about a month: negligible |\n| channel | (category) | 0.277 | shifted |\n| amount, all lines | 9e-32 | 0.075 | stable when pooled |\n\nWith 3,000 claims a week, a tiny move can be significant. Report it, then say it does not matter.","notes":"Real numbers of the course's run. By week 4 the tenure p-value was 0.48: the decoy is at the edge of what 3,000 claims can detect. The amount's p-value is tiny and its pooled PSI small: the next slide shows why both are true.","minutes":null,"lo":["LO7"]},{"id":"by-segment","n":22,"title":"Pooled over all lines the amount looks stable; motor amounts shifted","kind":"content","session":3,"hash":"253d0b32","md":"#### [day4#by-segment] Pooled over all lines the amount looks stable; motor amounts shifted\n\n*Lab 4.3 · by line of business*\n\n- **0.064** amount PSI, all lines, week 4\n- **0.290** motor claims only\n- **0.010 · 0.035** health · property\n\n> **Compute drift where the model behaves differently.** A shift in a minority segment disappears in the pooled number.","notes":"From `tools/drift.py --by line` in the course's run; week 3 had motor amounts at 0.353. The planted change multiplied motor amounts by 1.6 from week 3. Channel shifted in every line (0.23 to 0.30 in week 4), which is why it also shows pooled.","minutes":null,"lo":["LO7"]},{"id":"what-labels-say","n":23,"title":"The predictions moved at once; whether they are wrong waits for labels","kind":"content","session":3,"hash":"c7e8e953","md":"#### [day4#what-labels-say] The predictions moved at once; whether they are wrong waits for labels\n\n*What Rifd can conclude*\n\n| Week | Investigate share of Farz 1.0.0 | Agreement with delayed labels |\n| --- | --- | --- |\n| 1 | 20% | 73.0% |\n| 2 | 19% | 74.6% |\n| 3 | 26% | not yet known |\n| 4 | 26% | not yet known |\n\n> **The retraining trigger.** Drift in the inputs starts a closer watch; agreement with the labels falling below an agreed level starts a retraining.","notes":"From the course's replay of the four weeks through Farz 1.0.0. The rise in investigations follows the inputs (larger motor amounts) and may be right: bigger claims may deserve a look. That is the honest report: data drift is certain, its effect on accuracy is unknown for two more weeks, and the retraining trigger is agreement falling once the labels arrive.","minutes":null,"lo":["LO7"]},{"id":"check-drift","n":24,"title":"What should the drift report say?","kind":"quiz","session":3,"hash":"41ea86b2","md":"#### [day4#check-drift] What should the drift report say?\n\n*Checkpoint*\n\n**Question:** In week 3, the region mix has a PSI of 0.02. Customer age has a KS p-value of 0.001 and a PSI of 0.03. The channel has a PSI of 0.31. Labels for week 3 arrive in two weeks. Which summary is right?\n\n- A. Age and channel shifted; the model is degrading\n- B. Channel shifted, so accuracy has fallen and the model must be retrained now\n- C. Nothing shifted: two of three features are stable\n- D. Channel shifted; age moved slightly and does not matter; accuracy is unknown until the labels arrive","notes":"Answer: D. This is the shape of the drift report participants write in lab 4.3; the check also refuses a report that calls tenure shifted.","minutes":null,"lo":["LO7"]},{"id":"lab-4-3","n":25,"title":"Drift in four weeks","kind":"lab","session":3,"hash":"98f21fe7","md":"#### [day4#lab-4-3] Drift in four weeks\n\nLab 4.3 · 25 min\n\nReplay four weeks of claims, compute a drift statistic per feature and name the shifted ones.\n\n[D4_3_drift.html](https://sdaiaacademy.github.io/ae-205/labs/D4_3_drift.html)\n\n- [ ] Replay the four weeks through the service (5 min)\n- [ ] Compute population stability and a KS test per feature (9 min)\n- [ ] Name the shifted features; check the labels you have (7 min)\n- [ ] Write the drift report; check (4 min)\n- [ ] ✱ Stretch: Recompute the statistics with Evidently and compare its verdicts with yours","notes":"AI policy: tutor. Usual problems: `np.log` of zero when the clip is forgotten; computing PSI on the replay weeks against each other instead of the training data; reading only the pooled numbers. On a slow laptop the four replays take several minutes at the requested rate; start them before explaining PSI. Solution: `labs/solutions/S4_3.py`.","minutes":null,"lo":[]},{"id":"s4","n":26,"title":"Alerts and a runbook","kind":"section","session":4,"hash":"ed979219","md":"#### [day4#s4] Alerts and a runbook\n\n*Session 4*\n\n- Write an alert rule on error ratio and one on latency\n- Test both rules against a recorded error spike\n- Write a one-page runbook with the accountable person","notes":"","minutes":null,"lo":["LO5"]},{"id":"symptom-alerts","n":27,"title":"Alert on what callers feel, not on everything that can be measured","kind":"content","session":4,"hash":"2c0e5d32","md":"#### [day4#symptom-alerts] Alert on what callers feel, not on everything that can be measured\n\n*Alerts*\n\n- **Page someone.**\n  - errors above 1% for two minutes\n  - 95th percentile above 150 ms for five minutes\n- **Put on a dashboard.**\n  - CPU of one pod\n  - one slow request\n  - a label share moving slowly: a weekly drift report\n\n> **What goes wrong.** An alert that fires and resolves by itself every few hours trains the on-call engineer to ignore it.","notes":"Symptom-based alerting follows the Google SRE book's advice: page on what users experience and keep causes for dashboards. The label-share criterion is for releases, where the comparison is clear; slow movement of the shares belongs to the drift report.","minutes":null,"lo":["LO5"]},{"id":"alert-rule","n":28,"title":"An expression, a duration, a severity and a runbook link","kind":"content","session":4,"hash":"faac5a76","md":"#### [day4#alert-rule] An expression, a duration, a severity and a runbook link\n\n*A rule*\n\n```yaml\n# file: monitoring/alerts.yml\n- alert: FarzLatencyP95High\n  expr: histogram_quantile(0.95, sum by (le) (rate(rifd_request_duration_seconds_bucket{route=\"/v1/triage\"}[5m]))) > 0.15\n  for: 5m\n  labels: {severity: page}\n  annotations:\n    summary: The 95th-percentile triage latency is above the 150 ms objective\n    runbook_url: RUNBOOK.md#latency\n```","notes":"Prometheus' rule format, which `promlite` reads too. The expression is the dashboard's query with a threshold; `for:` asks that it holds at every evaluation for five minutes before the alert fires. Participants write both rules without AI help first in lab 4.4.","minutes":null,"lo":["LO5"]},{"id":"test-on-recording","n":29,"title":"Test alerts on a recording, before they wake anyone","kind":"content","session":4,"hash":"6e6280f5","md":"#### [day4#test-on-recording] Test alerts on a recording, before they wake anyone\n\n*Lab 4.4 · testing the rules*\n\n| Rules | Blip at minute 6 | Errors, minutes 12 to 18 | Latency from minute 22 |\n| --- | --- | --- | --- |\n| Reference: errors 1m, for 2m; latency 5m, for 5m | quiet | fires 14.0 to 18.8 | fires from 28.0 |\n| Same, no `for:` | quiet | fires from 12.0 | fires from 23.0 |\n| Latency over 1m, no `for:` | fires 6.0 to 7.8 | unchanged rule: 14.0 to 18.8 | fires from 22.0 |","notes":"From the course's run of `promlite rules` on `spike.jsonl`, 30 minutes scraped every 15 seconds. In the third row only the latency rule changed. Adding `for: 2m` to that 1-minute rule silenced the blip again and fired from minute 24.0. Both the window and the duration buy quiet with delay; choose them from what Munira can tolerate. `promtool test rules` does the same for real Prometheus.","minutes":null,"lo":["LO5"]},{"id":"runbook","n":30,"title":"One page the on-call engineer can follow in the middle of the night","kind":"content","session":4,"hash":"dcb0e60a","md":"#### [day4#runbook] One page the on-call engineer can follow in the middle of the night\n\n*The runbook*\n\n- **Accountable for a rollback decision:** Munira Al-Ajmi\n- For each alert: what the caller sees, the first three checks\n- When to roll back, and the exact command\n- Who to tell: Munira, the platform channel, Bassam if personal data may have leaked\n\n- **Linked from the alert.** `runbook_url: RUNBOOK.md#errors`: the page opens from the notification.","notes":"The check refuses a runbook without an accountable name. Ask: who in your organisation is named in a runbook as accountable for a model's decisions? Often nobody, which is the gap this slide is about.","minutes":null,"lo":["LO5","LO7"]},{"id":"choose-capstone","n":31,"title":"Choose the model you will take to a monitored service","kind":"content","session":4,"hash":"ee285c1c","md":"#### [day4#choose-capstone] Choose the model you will take to a monitored service\n\n*Tomorrow*\n\n- **Farz.** The course's model, with every artefact you built this week.\n- **Shabih.** The similar-claims model, with its own memory, start-up and release questions.\n- **Your own.** A model from your work, with synthetic or public data only.\n\nWrite the choice, the reason and the objective you will defend in `CAPSTONE.md`.","notes":"Remind participants that their own model must use no real personal data in a public repository. The defence is eight minutes and four minutes of questions, and the assessor injects a fault during it.","minutes":null,"lo":["LO1"]},{"id":"check-alerts","n":32,"title":"Why does this alert flap?","kind":"quiz","session":4,"hash":"0292c0f0","md":"#### [day4#check-alerts] Why does this alert flap?\n\n*Checkpoint*\n\n**Question:** An alert on the 95th-percentile latency uses a 30-second rate window and no for: duration. It fires for a minute about twice a day and resolves by itself. Callers never complain. What is the best first change?\n\n- A. Raise the threshold to 300 ms\n- B. Lengthen the window and add a for: duration, then test on a recording\n- C. Send it to a wider group\n- D. Delete the alert","notes":"Answer: B. Then ask what the change costs: a slower alert. The recording shows how much slower.","minutes":null,"lo":["LO5"]},{"id":"lab-4-4","n":33,"title":"Two alerts and a runbook","kind":"lab","session":4,"hash":"df4ab6d9","md":"#### [day4#lab-4-4] Two alerts and a runbook\n\nLab 4.4 · 25 min\n\nWrite two alert rules and a one-page runbook for the on-call engineer, then choose the capstone model.\n\n[D4_4_alerts_runbook.html](https://sdaiaacademy.github.io/ae-205/labs/D4_4_alerts_runbook.html)\n\n- [ ] Write the two rules without AI help (8 min)\n- [ ] Test them on the recorded spike (6 min)\n- [ ] Write the one-page runbook (8 min)\n- [ ] Choose the capstone model; check (3 min)\n- [ ] ✱ Stretch: Add a burn-rate alert on the error objective over two windows and test it on the same recording","notes":"AI policy: off for the first attempt at the two rules. Usual problems: YAML indentation; `status=~\"5..\"` written with single quotes; a threshold of 150 instead of 0.15 (the histogram is in seconds); a runbook without an accountable name. Solution: `labs/solutions/S4_4.py`.","minutes":null,"lo":[]},{"id":"wrap-up","n":34,"title":"Three things to keep from the course","kind":"content","session":4,"hash":"7165abf3","md":"#### [day4#wrap-up] Three things to keep from the course\n\n*Day 4 · wrap-up*\n\n- **Release on evidence.** A canary against written criteria, compared like with like, and a log entry with its files.\n- **Roll back first.** A named person is accountable; the criteria let the person on call act at once.\n- **Watch inputs, wait for labels.** Drift by segment, significant is not large, and alerts tested before they page.","notes":"Ask each participant which of the three their team would adopt first. Retraining pipelines and online evaluation, which today only named as triggers, are the subject of AE-305. Tomorrow is the capstone: build, defend, and recover from the fault the assessor injects.","minutes":null,"lo":["LO7","LO5"]},{"id":"next","n":35,"title":"Day 5: the capstone","kind":"content","session":4,"hash":"1125183d","md":"#### [day4#next] Day 5: the capstone\n\n*Next*\n\n- Bring your `CAPSTONE.md` and a public GitHub repository with the service, its container file and manifests\n- Dashboard and alerts as code, a load test against your objective, a recorded canary and rollback, a drift check\n- Eight minutes to defend, four minutes of questions, one injected fault","notes":"Give the rubric now (20/20/20/15/25) so that nobody meets it for the first time tomorrow. The capstone deck has the details.","minutes":null,"lo":["LO1"]}],"activities":[{"id":"check-strategy-q1","slide":"check-strategy","type":"single","prompt":"The fraud team has a new model that changes which claims are referred to investigators. The head of the team will not let any claim be referred by it until she has seen a week of its decisions on real claims. What do you propose?","options":[{"key":"A","text":"A 10% canary for a week"},{"key":"B","text":"A rolling update with readiness probes"},{"key":"C","text":"A shadow release for a week: copy each request to it and keep only the current model's answer"},{"key":"D","text":"Blue-green with a switch back if anything looks wrong"}],"correct":[2],"explanation":"Only shadow traffic shows the new model's decisions on real claims while no claim is decided by it.","misconceptions":["Even 10% of claims would be referred by the new model","A rolling update moves every claim to the new model within minutes","","Blue-green switches all traffic at once; the undo is fast but claims were referred"],"lo":["LO7"]},{"id":"check-rollback-q1","slide":"check-rollback","type":"single","prompt":"At 02:10 a canary has served 350 requests. Errors and latency are normal, but its investigate share is 14 points above the current version's. Munira's criteria say more than 10 points means roll back. Munira is asleep. What should the engineer do?","options":[{"key":"A","text":"Set the canary's share to 0 now, then tell Munira with the evidence"},{"key":"B","text":"Wait for Munira to decide in the morning"},{"key":"C","text":"Keep the canary, since errors and latency are normal"},{"key":"D","text":"Find the cause first, then decide"}],"correct":[0],"explanation":"The criteria were written so that the person on call can act at once; the accountable person is told, with the evidence.","misconceptions":["","Waiting leaves claims triaged by a version that already broke a written criterion","The criterion is about the labels; healthy errors and latency do not cancel it","Diagnosing first keeps the faulty version serving while the cause is found"],"lo":["LO7"]},{"id":"check-drift-q1","slide":"check-drift","type":"single","prompt":"In week 3, the region mix has a PSI of 0.02. Customer age has a KS p-value of 0.001 and a PSI of 0.03. The channel has a PSI of 0.31. Labels for week 3 arrive in two weeks. Which summary is right?","options":[{"key":"A","text":"Age and channel shifted; the model is degrading"},{"key":"B","text":"Channel shifted, so accuracy has fallen and the model must be retrained now"},{"key":"C","text":"Nothing shifted: two of three features are stable"},{"key":"D","text":"Channel shifted; age moved slightly and does not matter; accuracy is unknown until the labels arrive"}],"correct":[3],"explanation":"Name the large shift, set aside the significant but tiny move, and say what the missing labels leave open.","misconceptions":["A significant p-value with a tiny PSI is a small move, not a shift","Input drift says nothing yet about accuracy; that needs the labels","One feature far above the threshold is a shift, whatever the others do",""],"lo":["LO7"]},{"id":"check-alerts-q1","slide":"check-alerts","type":"single","prompt":"An alert on the 95th-percentile latency uses a 30-second rate window and no for: duration. It fires for a minute about twice a day and resolves by itself. Callers never complain. What is the best first change?","options":[{"key":"A","text":"Raise the threshold to 300 ms"},{"key":"B","text":"Lengthen the window and add a for: duration, then test on a recording"},{"key":"C","text":"Send it to a wider group"},{"key":"D","text":"Delete the alert"}],"correct":[1],"explanation":"A short window and no duration react to blips; a longer window and a duration fire only on sustained breaches, which the recording can prove.","misconceptions":["The objective is the threshold; moving it hides real breaches","","An alert nobody acts on is worse than none, whoever receives it","Deleting it leaves sustained breaches unseen"],"lo":["LO5"]}],"ai":{"context":{"course":"../context/course.md","courseJs":"../context/course.js","day":"day4.md","llms":"../llms.txt"},"tasks":[],"tools":[]},"bridge":{"allowedOrigins":[]},"features":{},"strings":{}}</script>
+<script src="../_engine/academy.js"></script>
+</body>
+</html>

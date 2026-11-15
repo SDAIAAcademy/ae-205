@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-ax="deck" data-track="ai-engineering">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Capstone · Capstone: a monitored service and its defence · Deploying AI Services: Containers, Serving and Monitoring</title>
+<meta name="generator" content="SDAIA Academy engine 1.0.0">
+<link rel="icon" href="../_engine/icon.svg">
+<link rel="alternate" type="text/markdown" href="capstone.md">
+<link rel="describedby" href="../llms.txt">
+<link rel="stylesheet" href="../_engine/academy.css">
+</head>
+<body>
+<div class="deck" data-course="Deploying AI Services: Containers, Serving and Monitoring" data-track="ai-engineering" data-day="Capstone">
+<section class="slide title" id="title" data-auto="title" data-label="Welcome" data-n="1">
+  <div class="kicker">SDAIA Academy · Deploying AI Services: Containers, Serving and Monitoring</div>
+  <h1>Capstone: a monitored service and its defence</h1>
+  <p class="lead mt">Capstone: Eight minutes to show the service, four minutes of questions, and one fault injected by the assessor</p>
+  <div class="meta"><span class="track">AI Engineering Track</span><span>4 teaching days + capstone day</span><span>8 min talk and demo · 4 min Q&amp;A</span><span>AE-205</span></div>
+  <aside class="notes">Today is theirs: keep your own talking to the opening and the closing. Confirm the running order and the demo setup (screen sharing, accounts, a recorded backup) first.</aside>
+</section>
+
+<section class="slide" id="agenda" data-label="Agenda" data-n="2">
+  <div class="kicker">Capstone</div>
+  <h2>How the presentations run</h2>
+  <div class="agenda">
+    <div class="item now"><div><b>Expectations and final prep</b><small>the rubric, a last rehearsal, then the first presentations</small></div></div>
+    <div class="item"><div><b>Presentations</b><small>each one timed, with questions after it</small></div></div>
+    <div class="item"><div><b>Review and closing</b><small>peer feedback, the trainer's review, what next</small></div></div>
+  </div>
+</section>
+
+<section class="slide" id="rubric" data-label="The rubric" data-n="3">
+  <div class="kicker">How presentations are scored</div>
+  <h2>The rubric</h2>
+  <div class="bars">
+    <div class="row"><span>Packaging and API</span><div class="bar c-teal" style="--w:80%"></div><span class="val">20%</span></div>
+    <div class="row"><span>Container and deployment</span><div class="bar c-cyan" style="--w:80%"></div><span class="val">20%</span></div>
+    <div class="row"><span>Observability</span><div class="bar c-coral" style="--w:80%"></div><span class="val">20%</span></div>
+    <div class="row"><span>Sizing against the objective</span><div class="bar c-purple" style="--w:60%"></div><span class="val">15%</span></div>
+    <div class="row"><span>Release, rollback and drift</span><div class="bar c-amber" style="--w:100%"></div><span class="val">25%</span></div>
+  </div>
+  <div class="callout tip mt"><b>Show results from at least two measured runs.</b> A claim without a number is a plan, not a result.</div>
+  <aside class="notes"><p>Full marks, one example each: packaging, an artefact that passes a clean reload and an API whose contract tests pass; container, a multi-stage image with a clean scan and a deployment with probes and limits; observability, a dashboard file and redacted logs with a test; sizing, a load test at three rates with the knee named and a cost per 1,000; release, a recorded canary, a recorded rollback within five minutes and a drift report by segment.</p></aside>
+</section>
+
+<section class="slide" id="format" data-label="Format" data-n="4">
+  <div class="kicker">Format</div>
+  <h2>8 minutes to present, 4 to answer</h2>
+  <div class="cols cols-3">
+    <div class="card c-teal"><h4>1 · The problem</h4><p class="small mb0">Who, what, why now. One slide.</p></div>
+    <div class="card c-cyan"><h4>2 · What you built</h4><p class="small mb0">Design, decisions, trade-offs. Then the live demo.</p></div>
+    <div class="card c-coral"><h4>3 · What you measured</h4><p class="small mb0">Baseline, improvement, failures found, what comes next.</p></div>
+  </div>
+  <div class="callout note mt"><b>Peer feedback.</b> After each talk, everyone writes one strength, one question and one suggestion.</div>
+</section>
+
+<section class="slide" id="what-to-submit" data-label="What to submit" data-n="5">
+  <div class="kicker">The submission</div>
+  <h2>One public repository, and the command behind every number</h2>
+  <div class="cols cols-2">
+    <ul class="bullets small">
+      <li>The service, its artefact and its contract tests</li>
+      <li>A container file and the deployment manifests</li>
+      <li>The dashboard and two alert rules, as files</li>
+      <li>A README: load test against your objective, canary and rollback, drift check</li>
+    </ul>
+    <div class="callout warn"><b>No real personal data.</b> A public repository holds synthetic or public data only, and no key of any kind.</div>
+  </div>
+  <aside class="notes"><p>The README is what the assessors read first: every number in it names the command and the file that produced it, as the release logs did on Day 4. Check before the first talk that every repository is public and that its secrets folder is ignored.</p></aside>
+</section>
+
+<section class="slide" id="injected-fault" data-label="The injected fault" data-n="6">
+  <div class="kicker">During the defence</div>
+  <h2>The assessor breaks one thing; you show how you would know and what you do</h2>
+  <div class="cols cols-3">
+    <div class="card c-coral"><h4>For example</h4><p class="small mb0">A model folder removed, a decision threshold changed, a slow dependency, a wrong image tag.</p></div>
+    <div class="card c-amber"><h4>You show</h4><p class="small mb0">Which check, metric, alert or trace tells you, in your own running service.</p></div>
+    <div class="card c-teal"><h4>You act</h4><p class="small mb0">Roll back, fix or explain, and say who you would tell.</p></div>
+  </div>
+  <aside class="notes"><p>Inject the fault during the questions, not the talk. Choose one the participant's own setup can show: a missing model folder (readiness), a changed threshold (label shares), an extra delay in a dependency (traces and latency), or a tag that cannot be pulled (pod events). Score how fast and how calmly they find it, not whether they knew in advance.</p></aside>
+</section>
+
+<section class="slide order" id="running-order" data-label="Running order" data-n="7">
+  <div class="kicker">Running order</div>
+  <h2>Who presents when</h2>
+  <table class="t small">
+    <tr><th>#</th><th>Presenter</th><th>Project</th></tr>
+    <tr><td>1</td><td><input placeholder="name"></td><td><input placeholder="Project"></td></tr>
+    <tr><td>2</td><td><input placeholder="name"></td><td><input placeholder="Project"></td></tr>
+    <tr><td>3</td><td><input placeholder="name"></td><td><input placeholder="Project"></td></tr>
+    <tr><td>4</td><td><input placeholder="name"></td><td><input placeholder="Project"></td></tr>
+    <tr><td>5</td><td><input placeholder="name"></td><td><input placeholder="Project"></td></tr>
+    <tr><td>6</td><td><input placeholder="name"></td><td><input placeholder="Project"></td></tr>
+    <tr><td>7</td><td><input placeholder="name"></td><td><input placeholder="Project"></td></tr>
+    <tr><td>8</td><td><input placeholder="name"></td><td><input placeholder="Project"></td></tr>
+  </table>
+  <aside class="notes">Type the names in at the start; the fields can be edited live and are not saved, so keep the list in your notes too.</aside>
+</section>
+
+<section class="slide dark" id="final-prep" data-label="Before the first presentation" data-n="8">
+  <div class="kicker">Before the first presentation</div>
+  <h1>Final prep · 20 minutes</h1>
+  <div class="timer" data-minutes="20"></div>
+  <p class="lead">Rehearse once, record a backup, try the demo on this screen.</p>
+  <aside class="notes">Press T to start the timer. Breaks are not slides: press B when the room needs one.</aside>
+</section>
+
+<section class="slide dark presenting" id="now-presenting" data-label="Now presenting" data-n="9">
+  <div class="kicker center">Now presenting</div>
+  <div class="center"><input placeholder="Presenter · project"></div>
+  <div class="timers mt">
+    <div><h3>Talk and demo</h3><div class="timer" data-minutes="8"></div></div>
+    <div><h3>Questions</h3><div class="timer" data-minutes="4"></div></div>
+  </div>
+  <aside class="notes">Type the presenter's name and press T to start the talk timer; start the second timer for the questions. Reuse this slide for every presenter.</aside>
+</section>
+
+<section class="slide" id="review" data-label="Trainer review" data-n="10">
+  <div class="kicker">Trainer review</div>
+  <h2>What the presentations showed</h2>
+  <div class="cols cols-3">
+    <div class="card c-teal"><h4>Strongest patterns</h4><p class="small mb0">What several projects got right.</p></div>
+    <div class="card c-coral"><h4>Common gaps</h4><p class="small mb0">What most projects would fix next.</p></div>
+    <div class="card c-purple"><h4>One surprise</h4><p class="small mb0">Something nobody expected.</p></div>
+  </div>
+  <aside class="notes">Fill these in from your scoring notes during the last break. Name projects for strengths; keep gaps anonymous.</aside>
+</section>
+
+<section class="slide" id="what-next" data-label="After the course" data-n="11">
+  <div class="kicker">After the course</div>
+  <h2>Keep going</h2>
+  <ul class="bullets">
+    <li><b>Your project stays yours:</b> keep it reproducible and add the next improvement you named today</li>
+    <li><b>Follow-up task:</b> run your capstone service on one week of replayed traffic and write a short incident note on what you saw</li>
+    <li><b>Next Academy courses:</b> AE-305, for retraining pipelines and online evaluation, and AE-307, for autoscaling and accelerators</li>
+  </ul>
+</section>
+
+<section class="slide dark" id="thanks" data-label="Thank you" data-n="12">
+  <div class="kicker">SDAIA Academy</div>
+  <h1>Thank you</h1>
+  <p class="lead">Deploying AI Services: Containers, Serving and Monitoring</p>
+</section>
+</div>
+<script type="application/json" id="academy-data">{"v":1,"engine":"1.0.0","build":{"at":"2026-11-15T09:27:24Z","version":"2027.1.0","commit":"fec8449"},"course":{"id":"ae-205","code":"AE-205","title":"Deploying AI Services: Containers, Serving and Monitoring","track":"ai-engineering","lang":"en","dir":"ltr","url":"https://sdaiaacademy.github.io/ae-205/","repo":"SDAIAAcademy/ae-205","home":"../index.html"},"deck":{"id":"capstone","kind":"capstone","day":5,"label":"Capstone","title":"Capstone: a monitored service and its defence","prev":"day4.html","next":null,"md":"capstone.md","alt":{}},"sessions":[],"slides":[{"id":"title","n":1,"title":"Capstone: a monitored service and its defence","kind":"title","session":0,"hash":"9db7ecd2","md":"#### [capstone#title] Capstone: a monitored service and its defence\n\n*SDAIA Academy · Deploying AI Services: Containers, Serving and Monitoring*\n\nCapstone: Eight minutes to show the service, four minutes of questions, and one fault injected by the assessor\n\nAI Engineering Track · 4 teaching days + capstone day · 8 min talk and demo · 4 min Q&A · AE-205","notes":"Today is theirs: keep your own talking to the opening and the closing. Confirm the running order and the demo setup (screen sharing, accounts, a recorded backup) first.","minutes":null,"lo":[]},{"id":"agenda","n":2,"title":"How the presentations run","kind":"content","session":0,"hash":"4b16b03e","md":"#### [capstone#agenda] How the presentations run\n\n*Capstone*\n\n- **Expectations and final prep**: the rubric, a last rehearsal, then the first presentations\n- **Presentations**: each one timed, with questions after it\n- **Review and closing**: peer feedback, the trainer's review, what next","notes":"","minutes":null,"lo":[]},{"id":"rubric","n":3,"title":"The rubric","kind":"content","session":0,"hash":"0ff32021","md":"#### [capstone#rubric] The rubric\n\n*How presentations are scored*\n\n| Item | Value |\n| --- | --- |\n| Packaging and API | 20% |\n| Container and deployment | 20% |\n| Observability | 20% |\n| Sizing against the objective | 15% |\n| Release, rollback and drift | 25% |\n\n> **Show results from at least two measured runs.** A claim without a number is a plan, not a result.","notes":"Full marks, one example each: packaging, an artefact that passes a clean reload and an API whose contract tests pass; container, a multi-stage image with a clean scan and a deployment with probes and limits; observability, a dashboard file and redacted logs with a test; sizing, a load test at three rates with the knee named and a cost per 1,000; release, a recorded canary, a recorded rollback within five minutes and a drift report by segment.","minutes":null,"lo":[]},{"id":"format","n":4,"title":"8 minutes to present, 4 to answer","kind":"content","session":0,"hash":"96bbb06e","md":"#### [capstone#format] 8 minutes to present, 4 to answer\n\n*Format*\n\n- **1 · The problem.** Who, what, why now. One slide.\n- **2 · What you built.** Design, decisions, trade-offs. Then the live demo.\n- **3 · What you measured.** Baseline, improvement, failures found, what comes next.\n\n> **Peer feedback.** After each talk, everyone writes one strength, one question and one suggestion.","notes":"","minutes":null,"lo":[]},{"id":"what-to-submit","n":5,"title":"One public repository, and the command behind every number","kind":"content","session":0,"hash":"4dcfdf99","md":"#### [capstone#what-to-submit] One public repository, and the command behind every number\n\n*The submission*\n\n- The service, its artefact and its contract tests\n- A container file and the deployment manifests\n- The dashboard and two alert rules, as files\n- A README: load test against your objective, canary and rollback, drift check\n\n> **No real personal data.** A public repository holds synthetic or public data only, and no key of any kind.","notes":"The README is what the assessors read first: every number in it names the command and the file that produced it, as the release logs did on Day 4. Check before the first talk that every repository is public and that its secrets folder is ignored.","minutes":null,"lo":[]},{"id":"injected-fault","n":6,"title":"The assessor breaks one thing; you show how you would know and what you do","kind":"content","session":0,"hash":"1378411e","md":"#### [capstone#injected-fault] The assessor breaks one thing; you show how you would know and what you do\n\n*During the defence*\n\n- **For example.** A model folder removed, a decision threshold changed, a slow dependency, a wrong image tag.\n- **You show.** Which check, metric, alert or trace tells you, in your own running service.\n- **You act.** Roll back, fix or explain, and say who you would tell.","notes":"Inject the fault during the questions, not the talk. Choose one the participant's own setup can show: a missing model folder (readiness), a changed threshold (label shares), an extra delay in a dependency (traces and latency), or a tag that cannot be pulled (pod events). Score how fast and how calmly they find it, not whether they knew in advance.","minutes":null,"lo":[]},{"id":"running-order","n":7,"title":"Who presents when","kind":"order","session":0,"hash":"20432938","md":"#### [capstone#running-order] Who presents when\n\n*Running order*\n\n| # | Presenter | Project |\n| --- | --- | --- |\n| 1 |  |  |\n| 2 |  |  |\n| 3 |  |  |\n| 4 |  |  |\n| 5 |  |  |\n| 6 |  |  |\n| 7 |  |  |\n| 8 |  |  |","notes":"Type the names in at the start; the fields can be edited live and are not saved, so keep the list in your notes too.","minutes":null,"lo":[]},{"id":"final-prep","n":8,"title":"Final prep · 20 minutes","kind":"content","session":0,"hash":"cbb54b3e","md":"#### [capstone#final-prep] Final prep · 20 minutes\n\n*Before the first presentation*\n\nRehearse once, record a backup, try the demo on this screen.","notes":"Press T to start the timer. Breaks are not slides: press B when the room needs one.","minutes":null,"lo":[]},{"id":"now-presenting","n":9,"title":"Talk and demo","kind":"presenting","session":0,"hash":"d5c15e83","md":"#### [capstone#now-presenting] Talk and demo\n\n*Now presenting*\n\n##### Questions","notes":"Type the presenter's name and press T to start the talk timer; start the second timer for the questions. Reuse this slide for every presenter.","minutes":null,"lo":[]},{"id":"review","n":10,"title":"What the presentations showed","kind":"content","session":0,"hash":"c8c581b8","md":"#### [capstone#review] What the presentations showed\n\n*Trainer review*\n\n- **Strongest patterns.** What several projects got right.\n- **Common gaps.** What most projects would fix next.\n- **One surprise.** Something nobody expected.","notes":"Fill these in from your scoring notes during the last break. Name projects for strengths; keep gaps anonymous.","minutes":null,"lo":[]},{"id":"what-next","n":11,"title":"Keep going","kind":"content","session":0,"hash":"7b99fb1f","md":"#### [capstone#what-next] Keep going\n\n*After the course*\n\n- **Your project stays yours:** keep it reproducible and add the next improvement you named today\n- **Follow-up task:** run your capstone service on one week of replayed traffic and write a short incident note on what you saw\n- **Next Academy courses:** AE-305, for retraining pipelines and online evaluation, and AE-307, for autoscaling and accelerators","notes":"","minutes":null,"lo":[]},{"id":"thanks","n":12,"title":"Thank you","kind":"content","session":0,"hash":"3a75bfd6","md":"#### [capstone#thanks] Thank you\n\n*SDAIA Academy*\n\nDeploying AI Services: Containers, Serving and Monitoring","notes":"","minutes":null,"lo":[]}],"activities":[],"ai":{"context":{"course":"../context/course.md","courseJs":"../context/course.js","day":"capstone.md","llms":"../llms.txt"},"tasks":[],"tools":[]},"bridge":{"allowedOrigins":[]},"features":{},"strings":{}}</script>
+<script src="../_engine/academy.js"></script>
+</body>
+</html>
