@@ -268,7 +268,7 @@
     <div class="step c-coral"><b>Above it</b>the achieved rate stops following the target</div>
   </div>
   <div class="callout tip mt"><b>Read three columns.</b> The 95th percentile, the error ratio, and whether the achieved rate kept up with the target.</div>
-  <aside class="notes"><p>In a quiet run of the course's solution, one worker carried about 160 requests a second with a 95th percentile between 126 and 150 ms; above that the objective broke. Later runs on the same laptop, shared with other heavy jobs, held the objective only at 40 a second, and the achieved rate stopped near 85: show participants that a load test measures the machine too, and that capacity must be measured on the hardware that will serve.</p></aside>
+  <aside class="notes"><p>In the course's final run one worker held the objective at 120 a second (95th percentile 129 ms) and broke it at 160 (262 ms); an earlier quiet run put the knee near 160. Later runs on the same laptop, shared with other heavy jobs, held the objective only at 40 a second, and the achieved rate stopped near 85: show participants that a load test measures the machine too, and that capacity must be measured on the hardware that will serve.</p></aside>
 </section>
 
 <section class="slide" id="check-load" data-lo="LO6">

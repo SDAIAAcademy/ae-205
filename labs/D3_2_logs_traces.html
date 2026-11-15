@@ -63,7 +63,7 @@ EOF</code></pre>
 
   <details class="instructor">
     <summary>For the trainer</summary>
-    <p>In the course's run the start state wrote 200 of its 401 log lines with a national id or a mobile number: every triage line, because it logged the claim with its member block. After the fix none did, every request line carried a request id, and 7.0% of 401 requests called the policy lookup. The slowest request's trace was <code>POST /v1/triage</code> with <code>policy_lookup</code> taking nearly all of its time and <code>predict</code> about 2 ms. The lookup is a 120 ms wait; on the shared laptop of the course's run it stretched to several hundred milliseconds, so expect smaller numbers on a quiet machine.</p>
+    <p>In the course's run the start state wrote 200 of its 401 log lines with a national id or a mobile number: every triage line, because it logged the claim with its member block. After the fix none did, every request line carried a request id, and 7.0% of 401 requests called the policy lookup. In the final run the slowest request took 190.5 ms: <code>policy_lookup</code> 121.5 ms and <code>predict</code> 2.8 ms. On a run where the laptop was shared with other heavy jobs, the same lookup stretched to several hundred milliseconds.</p>
     <p>Answers: in a trace attribute, an exception message that prints the body, the access log of a proxy; the main defence is not logging the body at all, because a pattern cannot know every way personal data is written; about 7%, which is more than the 5% the 95th percentile ignores, so the 95th percentile falls inside the slow requests. Solution: <code>labs/solutions/S3_2.py</code>.</p>
   </details>
 </article>

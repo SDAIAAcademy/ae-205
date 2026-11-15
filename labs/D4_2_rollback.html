@@ -61,7 +61,7 @@ uv run python tools/replay.py --file ../data/replay/week2.csv --url http://127.0
 
   <details class="instructor">
     <summary>For the trainer</summary>
-    <p>In the course's run the watch fired at 203 canary requests, 43 s after the release started: the investigate share was 37% against 19% for 1.1.0 and the standard share 24% against 42% (the latency criterion also fired, because the shared laptop was overloaded). The share went to 0 44 s after the start, and all 60 claims replayed afterwards were answered by 1.1.0.</p>
+    <p>In the course's final run the watch fired at 210 canary requests on the label criteria only (errors 0%, 95th percentile 142 ms): the investigate share was 38% against 18% for 1.1.0 and the standard share 24% against 43%. The share went to 0 40 s after the release started, and all 60 claims replayed afterwards were answered by 1.1.0. On an earlier run with the laptop overloaded the latency criterion fired as well.</p>
     <p>The cause is planted in <code>metadata.json</code>: farz 1.2.0's decision rule sends a claim to investigate at a probability of 0.05 instead of 0.30, so the model file is fine and the release is not. Answers: the label-share criterion, after the minimum of 200 canary requests; adjusters would have received about twice as many investigations, and nobody would have seen it in the errors or latency; the criteria were written in advance so that the on-call engineer can act at once and tell Munira. Solution: <code>labs/solutions/S4_2.py</code>.</p>
   </details>
 </article>

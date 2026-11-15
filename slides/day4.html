@@ -121,12 +121,12 @@
   <div class="kicker">Lab 4.2</div>
   <h2>Farz 1.2.0 answers fast, without errors, and sends too many claims to investigate</h2>
   <div class="cols cols-3">
-    <div class="stat center"><div class="big">19%</div><div class="lbl">investigate share of 1.1.0</div></div>
-    <div class="stat center"><div class="big">37%</div><div class="lbl">investigate share of the 1.2.0 canary</div></div>
-    <div class="stat center"><div class="big">44 s</div><div class="lbl">from the release to share 0</div></div>
+    <div class="stat center"><div class="big">18%</div><div class="lbl">investigate share of 1.1.0</div></div>
+    <div class="stat center"><div class="big">38%</div><div class="lbl">investigate share of the 1.2.0 canary</div></div>
+    <div class="stat center"><div class="big">40 s</div><div class="lbl">from the release to share 0</div></div>
   </div>
   <div class="callout warn mt"><b>What goes wrong.</b> A dashboard of errors and latency stays green the whole time.</div>
-  <aside class="notes"><p>From the course's run of lab 4.2: the watch fired at 203 canary requests, 43 seconds after the release began; the standard share also fell from 42% to 24%. On that run the laptop was shared with other heavy jobs, so the latency criterion fired too; on a quiet machine only the label criteria fire, which is the lesson: errors and latency alone would have kept 1.2.0 in service.</p></aside>
+  <aside class="notes"><p>From the course's final run of lab 4.2: the watch fired at 210 canary requests, on the label criteria only (no errors, 95th percentile 142 ms); the standard share also fell from 43% to 24%. Errors and latency alone would have kept 1.2.0 in service. On an earlier run with the laptop overloaded, the latency criterion fired too.</p></aside>
 </section>
 
 <section class="slide" id="find-the-cause" data-lo="LO7 LO2">

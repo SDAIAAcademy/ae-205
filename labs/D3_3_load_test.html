@@ -53,7 +53,7 @@ uv run python tools/loadtest.py --rates 100 --seconds 15 --out runs/load_one_cla
 
   <details class="instructor">
     <summary>For the trainer</summary>
-    <p>In a quiet run of the course's solution, one worker carried about 160 requests a second with a 95th percentile between 126 and 150 ms near that rate, and broke the objective above it; the floor of the 95th percentile is the 120 ms policy lookup that about 7% of claims make. The one-claim test reported a much lower 95th percentile because it never takes that path.</p>
+    <p>In the course's final run (one worker): the one-claim test at 100 a second reported a 95th percentile of 18.5 ms; the replay claims held the objective at 40 a second (131.9 ms) and at 100 a second (131.1 ms) and broke it at 220 (536.5 ms, with only 170 a second achieved). The floor of the 95th percentile is the 120 ms policy lookup that about 7% of claims make; the one-claim test never takes that path. Lab 3.4's run put one worker's capacity between 120 and 160 a second.</p>
     <p>Later runs on 15 November 2026, on the same laptop shared with several other heavy jobs, gave very different numbers: 40 a second held (95th percentile 137 ms, set by the lookup), while 100 and 220 a second broke it badly (about 1 s), with the achieved rate stuck near 85 to 88 a second; even the one-claim test broke at 100 a second (755 ms). A load test measures the machine as well as the service, so capacity is measured on the hardware that will serve, with nothing else running. The solution takes its rates from <code>RIFD_RATES</code> (default <code>40 100 220</code>) so that a trainer can move them. Rehearse on a room machine and put your numbers on the slide. Solution: <code>labs/solutions/S3_3.py</code>.</p>
   </details>
 </article>
