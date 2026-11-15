@@ -292,6 +292,31 @@ lookup_key: str = field(default_factory=lambda: _secret("RIFD_LOOKUP_KEY"))</cod
   <aside class="notes"><p>Press once per step. This is the stretch of lab 2.3. Day 4 goes further: a rolling update moves all traffic within minutes, which is why a canary is used when the question is whether the new model is better, not only whether it starts.</p></aside>
 </section>
 
+<section class="slide" id="replicas-autoscaling" data-lo="LO4">
+  <div class="kicker">Replicas and autoscaling</div>
+  <h2>A fixed number of replicas is a decision; an autoscaler makes it from a metric</h2>
+  <div class="cols cols-2">
+    <pre class="code s" data-file="k8s/farz-hpa.yaml (not in the lab)"><code class="language-yaml">apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+spec:
+  scaleTargetRef: {kind: Deployment, name: farz}
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: 60}</code></pre>
+    <ul class="bullets small">
+      <li><code>replicas: 2</code> in the Deployment: two pods, always</li>
+      <li>The autoscaler compares a measured value with a target and sets the count: wanted = ceil(current × measured ÷ target)</li>
+      <li>CPU utilisation is a share of the pod's <b>request</b>: no request, no autoscaling</li>
+      <li>New pods take traffic only when ready: Farz's start-up time is the delay</li>
+    </ul>
+  </div>
+  <aside class="notes"><p>Basics only; the lab keeps two fixed replicas. Worked example: two pods at 90% of their requested CPU with a target of 60% gives ceil(2 × 90 ÷ 60) = 3. The resource metrics come from the cluster's metrics server, which kind does not install by default. Scaling down waits five minutes by default so that the count does not flap. Processor load is often the wrong signal for a model service, as Day 3's trace shows for Farz, whose slow path waits on another system: Day 3 sizes the replicas from a load test, and AE-307 covers scaling on the right signal. Sources: Kubernetes documentation, Horizontal Pod Autoscaling.</p></aside>
+</section>
+
 <section class="slide" id="placement" data-lo="LO4">
   <div class="kicker">Where may it run?</div>
   <h2>The data each service holds decides where it may run</h2>

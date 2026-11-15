@@ -333,12 +333,12 @@
       <p class="small mb0">200 a second is 720,000 predictions an hour: <b>SAR 0.00082 per 1,000</b>.</p>
     </div>
   </div>
-  <aside class="notes"><p>The prices are invented for the course and labelled so in the data. Billing on requests, not on use, is how most hosting quotes containers. The arithmetic is the point: cost per hour divided by thousands of predictions per hour. Participants compute it for their own configurations in the lab.</p></aside>
+  <aside class="notes"><p>The prices are invented for the course and labelled so in the data. The sheet prices what a replica reserves (its CPU and memory requests), not what it happens to use, which is how the quote Rifd was given works. The arithmetic is the point: cost per hour divided by thousands of predictions per hour. Participants compute it for their own configurations in the lab.</p></aside>
 </section>
 
 <section class="slide" id="cpu-or-gpu" data-lo="LO6">
   <div class="kicker">Processor or graphics processor?</div>
-  <h2>For Farz, a graphics processor would cost twelve times more and help nothing</h2>
+  <h2>For Farz, a graphics processor would cost over twelve times more and help nothing</h2>
   <div class="cols cols-2">
     <div class="stat center"><div class="big">SAR 0.0103</div><div class="lbl">per 1,000 predictions on one GPU replica alone, at 200 a second</div></div>
     <ul class="bullets small">
@@ -347,7 +347,7 @@
       <li>Graphics processors pay off for large neural networks and batches</li>
     </ul>
   </div>
-  <aside class="notes"><p>7.40 / (200 × 3.6) = 0.0103 SAR per 1,000, against about 0.0008 for three CPU replicas: about twelve times more, before counting that one replica has no spare. The lesson is the order of questions: where does the time go (the trace), what does it cost (the sheet), then which hardware. AE-401 covers serving large language models, where the answer differs.</p></aside>
+  <aside class="notes"><p>7.40 / (200 × 3.6) = 0.0103 SAR per 1,000, against about 0.0008 for three CPU replicas: over twelve times more, before counting that one replica has no spare. The lesson is the order of questions: where does the time go (the trace), what does it cost (the sheet), then which hardware. AE-401 covers serving large language models, where the answer differs.</p></aside>
 </section>
 
 <section class="slide" id="check-sizing" data-lo="LO6">
@@ -378,7 +378,7 @@
     <div class="card c-cyan"><h4>Never write what you must protect</h4><p class="small mb0">Log fields, not bodies; redact as a last defence; test it. Traces find the slow step.</p></div>
     <div class="card c-coral"><h4>Size from a realistic open load</h4><p class="small mb0">Find the knee, plan below it with headroom and a spare, and price it per 1,000.</p></div>
   </div>
-  <aside class="notes"><p>Ask each participant which of their own services has a written latency objective. Tomorrow two new versions of Farz are released: one is promoted, one is rolled back on evidence, and four weeks of claims show drift.</p></aside>
+  <aside class="notes"><p>Ask each participant which of their own services has a written latency objective. Tomorrow two new versions of Farz are released as canaries: one is judged against written criteria, one is rolled back on evidence, and four weeks of claims show drift.</p></aside>
 </section>
 
 <section class="slide dark" id="next" data-lo="LO7">

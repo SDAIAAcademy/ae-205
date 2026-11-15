@@ -90,12 +90,14 @@
   <div class="kicker">Rollback criteria</div>
   <h2>Write the criteria before the release, while nobody is attached to it</h2>
   <div class="cols cols-2">
-    <ol class="bullets small">
-      <li>Judge only after <b>200</b> canary requests</li>
-      <li>Errors (500 or 503) above <b>1%</b></li>
-      <li>95th percentile above <b>150 ms</b></li>
-      <li>Any label share more than <b>10 points</b> from the current version's</li>
-    </ol>
+    <div>
+      <p class="small">Judge only after <b>200</b> canary requests. Roll back when any one holds:</p>
+      <ol class="bullets small">
+        <li>Errors (500 or 503) above <b>1%</b></li>
+        <li>95th percentile above <b>150 ms</b></li>
+        <li>Any label share more than <b>10 points</b> from the current version's</li>
+      </ol>
+    </div>
     <div class="card c-amber tint"><h4>Munira Al-Ajmi</h4><p class="small mb0">Wrote them, decides, and is accountable. The on-call engineer executes, and rolls back first when one fires.</p></div>
   </div>
   <aside class="notes"><p>From <code>../data/rollback_criteria.md</code>. The third criterion is the one an ordinary web service does not have. Ask the room why the minimum of 200 requests matters: with 30 canary requests, one slow health claim moves the 95th percentile on its own.</p></aside>
@@ -238,6 +240,7 @@
     <tr class="hl"><td>3</td><td>26%</td><td>not yet known</td></tr>
     <tr class="hl"><td>4</td><td>26%</td><td>not yet known</td></tr>
   </table>
+  <div class="callout tip mt"><b>The retraining trigger.</b> Drift in the inputs starts a closer watch; agreement with the labels falling below an agreed level starts a retraining.</div>
   <aside class="notes"><p>From the course's replay of the four weeks through Farz 1.0.0. The rise in investigations follows the inputs (larger motor amounts) and may be right: bigger claims may deserve a look. That is the honest report: data drift is certain, its effect on accuracy is unknown for two more weeks, and the retraining trigger is agreement falling once the labels arrive.</p></aside>
 </section>
 

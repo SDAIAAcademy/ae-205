@@ -11,6 +11,17 @@ are trained on synthetic claims by the setup script in about two minutes.
   cluster (kind, k3d or minikube) with `kubectl`. Without them, labs 2.1 and 2.3 still run: their
   checks review the container file and the manifest, and say that nothing was built or deployed.
 
+Before Day 2, on the room's network, fetch what the builds and the cluster start from, so that the
+first build of lab 2.1 and the first cluster of lab 2.3 fit in their minutes:
+
+```bash
+docker pull python:3.12 && docker pull python:3.12-slim && docker pull ghcr.io/astral-sh/uv:0.13.5
+kind create cluster --name warm && kind delete cluster --name warm   # fetches the node image
+```
+
+Lab 2.2 scans an image with Trivy or Grype when one of them is installed; without it, the lab scans
+the image's Python packages from its lock file with pip-audit, which the project already holds.
+
 ## Build the workspace
 
 ```bash

@@ -7,13 +7,14 @@
   <h2>What you need</h2>
   <ul>
     <li>The lab folder <code>rifd-labs/2.3</code>: <code>k8s/farz.yaml</code> as someone first wrote it, <code>k8s/config.yaml</code>, <code>k8s/kind.yaml</code> and <code>PLACEMENT.md</code></li>
-    <li>A single-node cluster: kind, k3d or minikube, with <code>kubectl</code>, and the image <code>rifd/claims:1.0.0</code> from lab 2.1</li>
+    <li>A single-node cluster: kind, k3d or minikube, with <code>kubectl</code>, and a container runtime. The folder holds the finished <code>Dockerfile</code>, so this lab does not need your image of lab 2.1</li>
     <li>AI policy: tutor.</li>
   </ul>
 
   <div class="step">
     <h3>Create the cluster and load the image <span class="min">5 min</span></h3>
     <pre class="code" data-file="terminal"><code class="language-bash">cd rifd-labs/2.3
+docker build -t rifd/claims:1.0.0 .       # seconds if lab 2.1 built it: the layers are cached
 kind create cluster --name rifd --config k8s/kind.yaml
 kind load docker-image rifd/claims:1.0.0 --name rifd
 kubectl create secret generic rifd-lookup --from-file=key=secrets/lookup.key</code></pre>

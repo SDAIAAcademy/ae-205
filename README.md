@@ -1,7 +1,7 @@
 <!-- academy:title -->
 # Deploying AI Services: Containers, Serving and Monitoring
 
-نشر خدمات الذكاء الاصطناعي: الحاويات وخدمة النماذج والمراقبة
+نشر خدمات الذكاء الاصطناعي: الحاويات وتقديم النماذج والمراقبة
 
 AI Engineering Track · SDAIA Academy · AE-205 · Level 200
 
@@ -114,6 +114,7 @@ Each line is a capability; the examples are interchangeable.
 - [Kubernetes: Configure liveness, readiness and startup probes](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/)
 - [Kubernetes: Resource management for pods and containers](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/)
 - [Kubernetes: Deployments](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+- [Kubernetes: Horizontal Pod Autoscaling](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/)
 - [Kubernetes: Secrets](https://kubernetes.io/docs/concepts/configuration/secret/)
 - [kind: Quick start](https://kind.sigs.k8s.io/docs/user/quick-start/)
 - [k3d (repository)](https://github.com/k3d-io/k3d)

@@ -7,7 +7,7 @@
   "lang": "en",
   "title": {
     "en": "Deploying AI Services: Containers, Serving and Monitoring",
-    "ar": "نشر خدمات الذكاء الاصطناعي: الحاويات وخدمة النماذج والمراقبة"
+    "ar": "نشر خدمات الذكاء الاصطناعي: الحاويات وتقديم النماذج والمراقبة"
   },
   "tagline": "Take a trained model from a notebook to a versioned, containerised, monitored service, size it against a latency objective, and release and roll it back on evidence",
   "description": "Participants take two trained models from a notebook to a monitored service. For a fictional mutual insurer they package a claims-triage classifier and a similar-claims embedding model with pinned dependencies, register model versions, serve them behind a versioned API with input validation, build and scan a container image, run it on a single-node local cluster with health checks, add metrics, structured logs and traces, load-test and size the service, release a new version by canary and roll it back, and detect drift in a replayed stream of claims.",
@@ -906,6 +906,10 @@
         {
           "title": "Kubernetes: Deployments",
           "url": "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/"
+        },
+        {
+          "title": "Kubernetes: Horizontal Pod Autoscaling",
+          "url": "https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/"
         },
         {
           "title": "Kubernetes: Secrets",

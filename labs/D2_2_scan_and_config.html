@@ -15,9 +15,10 @@
     <h3>Scan the supplied image and read the report <span class="min">6 min</span></h3>
     <pre class="code" data-file="terminal"><code class="language-bash">cd rifd-labs/2.2
 uv export --no-dev --no-hashes --frozen -o runs/requirements-audit.txt
-uv run pip-audit -r runs/requirements-audit.txt --no-deps --disable-pip --aliases --desc
-# with a runtime: docker build -f supplied/Dockerfile -t rifd/claims:supplied .
-#                 trivy image rifd/claims:supplied</code></pre>
+uv run pip-audit -r runs/requirements-audit.txt --no-deps --disable-pip --aliases --desc</code></pre>
+    <p>The supplied image installs exactly what <code>uv.lock</code> says, so this is the scan of its Python packages. With a container runtime, build the image and scan all of it, system packages included, with Trivy (<code>grype rifd/claims:supplied</code> does the same):</p>
+    <pre class="code" data-file="terminal"><code class="language-bash">docker build -f supplied/Dockerfile -t rifd/claims:supplied .
+trivy image --severity HIGH,CRITICAL rifd/claims:supplied</code></pre>
     <p>For each finding, note the package, the advisory, its severity and the version that fixes it. Open the advisory and read which requests trigger it.</p>
   </div>
 
@@ -27,6 +28,7 @@ uv run pip-audit -r runs/requirements-audit.txt --no-deps --disable-pip --aliase
     <pre class="code" data-file="terminal"><code class="language-bash">uv lock --upgrade-package h11
 uv export --no-dev --no-hashes --frozen -o runs/requirements-audit.txt
 uv run pip-audit -r runs/requirements-audit.txt --no-deps --disable-pip</code></pre>
+    <p>With a runtime, build the image again and repeat the <code>trivy image</code> scan: the h11 finding is gone, and what remains belongs to the base image.</p>
   </div>
 
   <div class="step">
