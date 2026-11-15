@@ -1,5 +1,5 @@
 <section class="slide title" id="title" data-auto="title">
-  <aside class="notes">REPLACE: welcome; introduce yourself; one question to the room that calibrates the pace; the rhythm of the day</aside>
+  <aside class="notes"><p>Last teaching day. Ask the room: when did your team last undo a release, and how long did the decision take? Today Farz meets the hardest part of serving: changing it safely while it runs, and noticing when the world changes under it.</p><p>Labs 4.1 and 4.2 run three processes each; remind participants to stop them at the end of each lab. Lab 4.4 closes with the choice of capstone model.</p></aside>
 </section>
 
 <section class="slide" id="agenda" data-auto="agenda"></section>
@@ -8,151 +8,364 @@
 
 <section class="slide section" id="s1" data-auto="section" data-session="1"></section>
 
-<section class="slide" id="s1-idea" data-lo="LO7">
-  <div class="kicker">REPLACE: the question this slide answers</div>
-  <h2>REPLACE: one idea, stated as a sentence</h2>
-  <div class="cols cols-2">
-    <ul class="bullets">
-      <li>REPLACE: at most six bullets, each a complete thought</li>
-      <li>REPLACE: bold the key phrase; numbers come from the lab run, not from memory</li>
-    </ul>
-    <div class="card c-teal"><h4>In the case study</h4><p class="small mb0">REPLACE: tie the idea to the case study and its data</p></div>
-  </div>
-  <div class="callout warn mt"><b>What goes wrong.</b> REPLACE: the failure participants will hit, and how to recognise it</div>
-  <aside class="notes">REPLACE: what to say, the demo to run, the question to ask the room, the common failure and its fix</aside>
+<section class="slide" id="strategies" data-lo="LO7">
+  <div class="kicker">Release strategies</div>
+  <h2>Four ways to put a new version in front of callers</h2>
+  <table class="t small">
+    <tr><th>Strategy</th><th>What callers get</th><th>Answers the question</th></tr>
+    <tr><td>Rolling</td><td>pods replaced one at a time; all traffic moves in minutes</td><td>does it start and stay ready?</td></tr>
+    <tr><td>Blue-green</td><td>a full second copy; one switch moves everything, one switch back</td><td>can we undo in seconds?</td></tr>
+    <tr class="hl"><td>Canary</td><td>a small share, say 10%, then more if it holds</td><td>is it better, or at least no worse, on real traffic?</td></tr>
+    <tr><td>Shadow</td><td>none: a copy of each request goes to it and its answer is thrown away</td><td>how would it behave, with no caller at risk?</td></tr>
+  </table>
+  <aside class="notes"><p>Day 2's rolling update answers only the first question. A model release needs the third: whether its predictions are acceptable, which no probe can tell. Shadow is the choice when even 10% of claims is too much risk, for example a model that changes who gets investigated.</p></aside>
 </section>
 
-<section class="slide" id="s1-steps" data-lo="LO7">
-  <div class="kicker">Step by step</div>
-  <h2>REPLACE: a process, shown one step per key press</h2>
-  <div class="flow">
-    <div class="step c-teal"><b>1 · REPLACE: name</b>REPLACE: what happens first</div>
-    <div class="arrow frag" data-frag="b">→</div><div class="step c-cyan frag" data-frag="b"><b>2 · REPLACE: name</b>REPLACE: the next piece</div>
-    <div class="arrow frag" data-frag="c">→</div><div class="step c-coral frag" data-frag="c"><b>3 · REPLACE: name</b>REPLACE: the result</div>
+<section class="slide" id="choose-by-risk" data-lo="LO7">
+  <div class="kicker">Choosing</div>
+  <h2>Choose the strategy from what could go wrong, and for whom</h2>
+  <div class="cols cols-2 gap-s">
+    <div class="card c-teal"><h4>A fix to logging</h4><p class="small mb0">No change in predictions: a rolling update, watched by the probes.</p></div>
+    <div class="card c-cyan"><h4>Farz 1.1.0, a new algorithm</h4><p class="small mb0">Predictions change a little: a 10% canary with written criteria.</p></div>
+    <div class="card c-amber"><h4>A new decision rule</h4><p class="small mb0">Who gets investigated changes: shadow first, then a canary.</p></div>
+    <div class="card c-coral"><h4>A new contract version</h4><p class="small mb0">Callers must change too: a new path, <code>/v2/</code>, beside the old one.</p></div>
   </div>
-  <div class="callout tip mt frag"><b>Takeaway.</b> REPLACE: the one sentence to remember</div>
-  <aside class="notes">Press once per step and say what each step adds before the next one appears. REPLACE: the example to walk through</aside>
+  <aside class="notes"><p>The fourth case returns to Day 1: the path carries the contract version, so a breaking change to the contract never ships as a model release. Ask participants to place a release of their own team on this grid.</p></aside>
+</section>
+
+<section class="slide" id="router" data-lo="LO7">
+  <div class="kicker">Lab 4.1 · the router</div>
+  <h2>A hash of the claim id decides which version answers</h2>
+  <pre class="code s" data-file="tools/router.py"><code class="language-python">def to_canary(claim_id: str) -&gt; bool:
+    bucket = int(hashlib.sha256(claim_id.encode()).hexdigest()[:8], 16) % 10000
+    return bucket &lt; STATE["weight"] * 10000</code></pre>
+  <ul class="bullets small mt">
+    <li>The same claim always reaches the same version: a retry never gets a second opinion</li>
+    <li><code>POST /admin/weight</code> changes the share at once and records when and why</li>
+    <li>On a cluster: two Deployments behind one Service in the ratio you want, or a weighted route of a gateway or service mesh</li>
+  </ul>
+  <aside class="notes"><p>A random split would send a retried claim to either version, so one claim could be triaged twice with different labels. Gateways such as the Kubernetes Gateway API's weighted routes, Istio or Argo Rollouts do this split in production; the course's router keeps it visible in thirty lines.</p></aside>
+</section>
+
+<section class="slide" id="like-with-like" data-lo="LO7">
+  <div class="kicker">Comparing</div>
+  <h2>Compare the two versions on the same hour of the same traffic</h2>
+  <div class="cols cols-2">
+    <ul class="bullets small">
+      <li><b>Errors</b>: the share of 5xx answers of each version</li>
+      <li><b>Latency</b>: the 95th percentile of each, measured by the caller</li>
+      <li><b>Label shares</b>: fast track, standard, investigate</li>
+      <li><b>Agreement</b> with the delayed labels that have arrived</li>
+    </ul>
+    <div class="callout warn"><b>What goes wrong.</b> Comparing the canary with last week's dashboard: the traffic of a Thursday after a storm is not the traffic of a quiet Sunday.</div>
+  </div>
+  <aside class="notes"><p><code>tools/compare.py</code> groups the replay's answers by the version that gave them. Agreement needs labels, which arrive weeks later; week 1's labels have arrived in the case study, so lab 4.1 can use them. In production that means a canary's accuracy is judged long after its errors and latency.</p></aside>
+</section>
+
+<section class="slide" id="check-strategy" data-lo="LO7">
+  <div class="kicker">Checkpoint</div>
+  <h2>Which release strategy?</h2>
+  <div class="quiz" data-type="single" data-lo="LO7">
+    <p class="lead">The fraud team has a new model that changes which claims are referred to investigators. The head of the team will not let any claim be referred by it until she has seen a week of its decisions on real claims. What do you propose?</p>
+    <div class="opts">
+      <div class="opt" data-why="Even 10% of claims would be referred by the new model">A 10% canary for a week</div>
+      <div class="opt" data-why="A rolling update moves every claim to the new model within minutes">A rolling update with readiness probes</div>
+      <div class="opt" data-ok>A shadow release for a week: copy each request to it and keep only the current model's answer</div>
+      <div class="opt" data-why="Blue-green switches all traffic at once; the undo is fast but claims were referred">Blue-green with a switch back if anything looks wrong</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> Only shadow traffic shows the new model's decisions on real claims while no claim is decided by it.</div>
+  </div>
+  <aside class="notes"><p>Answer: C. Then ask what the shadow costs: a second copy of the compute, and a store for its answers, which carries the same personal data rules as the service.</p></aside>
 </section>
 
 <section class="slide lab" id="lab-4-1" data-auto="lab" data-lab="4.1">
-  <aside class="notes">REPLACE: what to watch for while participants work, the typical problems, and the fallback for anyone who did not finish an earlier lab</aside>
+  <aside class="notes"><p>AI policy: tutor. Usual problems: both servers started on the same model folder; the replay sent to a server's port instead of the router's (every answer then comes from one version); judging before 200 canary requests. Stop the three servers at the end. Solution: <code>labs/solutions/S4_1.py</code>.</p></aside>
 </section>
 
 <!-- Session 2 -->
 
 <section class="slide section" id="s2" data-auto="section" data-session="2"></section>
 
-<section class="slide" id="s2-idea" data-lo="LO7">
-  <div class="kicker">REPLACE: the question this slide answers</div>
-  <h2>REPLACE: one idea, stated as a sentence</h2>
+<section class="slide" id="written-criteria" data-lo="LO7">
+  <div class="kicker">Rollback criteria</div>
+  <h2>Write the criteria before the release, while nobody is attached to it</h2>
   <div class="cols cols-2">
-    <ul class="bullets">
-      <li>REPLACE: at most six bullets, each a complete thought</li>
-      <li>REPLACE: bold the key phrase; numbers come from the lab run, not from memory</li>
-    </ul>
-    <div class="card c-teal"><h4>In the case study</h4><p class="small mb0">REPLACE: tie the idea to the case study and its data</p></div>
+    <ol class="bullets small">
+      <li>Judge only after <b>200</b> canary requests</li>
+      <li>Errors (500 or 503) above <b>1%</b></li>
+      <li>95th percentile above <b>150 ms</b></li>
+      <li>Any label share more than <b>10 points</b> from the current version's</li>
+    </ol>
+    <div class="card c-amber tint"><h4>Munira Al-Ajmi</h4><p class="small mb0">Wrote them, decides, and is accountable. The on-call engineer executes, and rolls back first when one fires.</p></div>
   </div>
-  <div class="callout warn mt"><b>What goes wrong.</b> REPLACE: the failure participants will hit, and how to recognise it</div>
-  <aside class="notes">REPLACE: what to say, the demo to run, the question to ask the room, the common failure and its fix</aside>
+  <aside class="notes"><p>From <code>../data/rollback_criteria.md</code>. The third criterion is the one an ordinary web service does not have. Ask the room why the minimum of 200 requests matters: with 30 canary requests, one slow health claim moves the 95th percentile on its own.</p></aside>
 </section>
 
-<section class="slide" id="s2-steps" data-lo="LO7">
-  <div class="kicker">Step by step</div>
-  <h2>REPLACE: a process, shown one step per key press</h2>
+<section class="slide" id="who-decides" data-lo="LO7">
+  <div class="kicker">Accountability</div>
+  <h2>One named person decides; the criteria let anyone act at once</h2>
   <div class="flow">
-    <div class="step c-teal"><b>1 · REPLACE: name</b>REPLACE: what happens first</div>
-    <div class="arrow frag" data-frag="b">→</div><div class="step c-cyan frag" data-frag="b"><b>2 · REPLACE: name</b>REPLACE: the next piece</div>
-    <div class="arrow frag" data-frag="c">→</div><div class="step c-coral frag" data-frag="c"><b>3 · REPLACE: name</b>REPLACE: the result</div>
+    <div class="step c-coral"><b>1 · A criterion fires</b>the watch prints which one</div>
+    <div class="arrow">→</div>
+    <div class="step c-amber"><b>2 · Roll back</b>the on-call engineer sets the share to 0</div>
+    <div class="arrow">→</div>
+    <div class="step c-teal"><b>3 · Tell</b>Munira, with the evidence files</div>
+    <div class="arrow">→</div>
+    <div class="step c-navy"><b>4 · Diagnose</b>after traffic is safe</div>
   </div>
-  <div class="callout tip mt frag"><b>Takeaway.</b> REPLACE: the one sentence to remember</div>
-  <aside class="notes">Press once per step and say what each step adds before the next one appears. REPLACE: the example to walk through</aside>
+  <div class="callout tip mt"><b>Roll back first, diagnose second.</b> Every minute spent finding the cause is a minute of claims triaged by a faulty version.</div>
+  <aside class="notes"><p>SDAIA's AI Ethics Principles ask that responsibility for an AI system's outcomes is assigned to people; a runbook that names Munira does that for this decision. The order on the slide is the order of lab 4.2, where the check measures the seconds between the start of the release and share 0.</p></aside>
+</section>
+
+<section class="slide" id="faulty-release" data-lo="LO7">
+  <div class="kicker">Lab 4.2</div>
+  <h2>Farz 1.2.0 answers fast, without errors, and sends too many claims to investigate</h2>
+  <div class="cols cols-3">
+    <div class="stat center"><div class="big">19%</div><div class="lbl">investigate share of 1.1.0</div></div>
+    <div class="stat center"><div class="big">37%</div><div class="lbl">investigate share of the 1.2.0 canary</div></div>
+    <div class="stat center"><div class="big">44 s</div><div class="lbl">from the release to share 0</div></div>
+  </div>
+  <div class="callout warn mt"><b>What goes wrong.</b> A dashboard of errors and latency stays green the whole time.</div>
+  <aside class="notes"><p>From the course's run of lab 4.2: the watch fired at 203 canary requests, 43 seconds after the release began; the standard share also fell from 42% to 24%. On that run the laptop was shared with other heavy jobs, so the latency criterion fired too; on a quiet machine only the label criteria fire, which is the lesson: errors and latency alone would have kept 1.2.0 in service.</p></aside>
+</section>
+
+<section class="slide" id="find-the-cause" data-lo="LO7 LO2">
+  <div class="kicker">Diagnose second</div>
+  <h2>The model file is fine; the decision rule beside it is not</h2>
+  <div class="cols cols-2">
+    <pre class="code s" data-file="models/farz-1.1.0/metadata.json"><code class="language-json">"decision": {"investigate_threshold": 0.3}</code></pre>
+    <pre class="code s" data-file="models/farz-1.2.0/metadata.json"><code class="language-json">"decision": {"investigate_threshold": 0.05}</code></pre>
+  </div>
+  <p class="small mt">Day 1 put the decision rule into the artefact so that it travels with the model. That also means a release can change behaviour without changing a single weight.</p>
+  <aside class="notes"><p>The planted fault. Ask how it could have been caught before the release: a test that compares the label shares of a new artefact with the current one on a fixed set of claims, or a review of the metadata diff. Both belong in the capstone's pipeline.</p></aside>
+</section>
+
+<section class="slide" id="evidence" data-lo="LO7">
+  <div class="kicker">The record</div>
+  <h2>A release log entry is the evidence an auditor will ask for</h2>
+  <table class="t small">
+    <tr><th>Row</th><th>Comes from</th></tr>
+    <tr><td>Canary requests judged, error ratio, p95, label shares</td><td><code>runs/compare.json</code></td></tr>
+    <tr><td>Seconds from the release to share 0, and the reason</td><td><code>runs/router_events.jsonl</code></td></tr>
+    <tr><td>Every answer after the rollback came from 1.1.0</td><td><code>runs/after_rollback.jsonl</code></td></tr>
+    <tr class="hl"><td>Cause, decided by, accountable</td><td>the metadata diff, and the runbook</td></tr>
+  </table>
+  <aside class="notes"><p>Each row names a file, so the entry can be checked rather than believed. The capstone asks for one recorded canary and one recorded rollback with the same evidence.</p></aside>
+</section>
+
+<section class="slide" id="check-rollback" data-lo="LO7">
+  <div class="kicker">Checkpoint</div>
+  <h2>What does the on-call engineer do now?</h2>
+  <div class="quiz" data-type="single" data-lo="LO7">
+    <p class="lead">At <time>02:10</time> a canary has served 350 requests. Errors and latency are normal, but its investigate share is 14 points above the current version's. Munira's criteria say more than 10 points means roll back. Munira is asleep. What should the engineer do?</p>
+    <div class="opts">
+      <div class="opt" data-ok>Set the canary's share to 0 now, then tell Munira with the evidence</div>
+      <div class="opt" data-why="Waiting leaves claims triaged by a version that already broke a written criterion">Wait for Munira to decide in the morning</div>
+      <div class="opt" data-why="The criterion is about the labels; healthy errors and latency do not cancel it">Keep the canary, since errors and latency are normal</div>
+      <div class="opt" data-why="Diagnosing first keeps the faulty version serving while the cause is found">Find the cause first, then decide</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> The criteria were written so that the person on call can act at once; the accountable person is told, with the evidence.</div>
+  </div>
+  <aside class="notes"><p>Answer: A. If someone picks B, ask what the criteria are for if they do not allow action at <time>02:10</time>. Accountability stays with Munira; execution does not wait for her.</p></aside>
 </section>
 
 <section class="slide lab" id="lab-4-2" data-auto="lab" data-lab="4.2">
-  <aside class="notes">REPLACE: what to watch for while participants work, the typical problems, and the fallback for anyone who did not finish an earlier lab</aside>
+  <aside class="notes"><p>AI policy: tutor. Usual problems: the replay stopped before the canary reached 200 requests, so nothing fires; a rollback event without a reason; forgetting to replay after the rollback, which the check needs to prove every answer comes from 1.1.0. Solution: <code>labs/solutions/S4_2.py</code>.</p></aside>
 </section>
 
 <!-- Session 3 -->
 
 <section class="slide section" id="s3" data-auto="section" data-session="3"></section>
 
-<section class="slide" id="s3-idea" data-lo="LO7">
-  <div class="kicker">REPLACE: the question this slide answers</div>
-  <h2>REPLACE: one idea, stated as a sentence</h2>
+<section class="slide" id="two-drifts" data-lo="LO7">
+  <div class="kicker">Drift</div>
+  <h2>The inputs can change, or what they mean can change</h2>
   <div class="cols cols-2">
-    <ul class="bullets">
-      <li>REPLACE: at most six bullets, each a complete thought</li>
-      <li>REPLACE: bold the key phrase; numbers come from the lab run, not from memory</li>
-    </ul>
-    <div class="card c-teal"><h4>In the case study</h4><p class="small mb0">REPLACE: tie the idea to the case study and its data</p></div>
+    <div class="card c-teal flat"><h4>Data drift</h4><p class="small mb0">The distribution of the inputs moves: more claims through the app, larger motor amounts. Visible the day it happens.</p></div>
+    <div class="card c-coral flat"><h4>Concept drift</h4><p class="small mb0">The link between inputs and the right label moves: the same claim should now be triaged differently. Visible only when the labels arrive.</p></div>
   </div>
-  <div class="callout warn mt"><b>What goes wrong.</b> REPLACE: the failure participants will hit, and how to recognise it</div>
-  <aside class="notes">REPLACE: what to say, the demo to run, the question to ask the room, the common failure and its fix</aside>
+  <div class="callout note mt"><b>Rifd's labels arrive about two weeks after a claim.</b> In week 4, weeks 1 and 2 are labelled; weeks 3 and 4 are not.</div>
+  <aside class="notes"><p>Data drift does not always hurt a model, and concept drift can happen with no data drift at all. Ask the room for an example of each in insurance: a new app channel (data), and a new fraud pattern with the same claim profile (concept).</p></aside>
 </section>
 
-<section class="slide" id="s3-steps" data-lo="LO7">
-  <div class="kicker">Step by step</div>
-  <h2>REPLACE: a process, shown one step per key press</h2>
-  <div class="flow">
-    <div class="step c-teal"><b>1 · REPLACE: name</b>REPLACE: what happens first</div>
-    <div class="arrow frag" data-frag="b">→</div><div class="step c-cyan frag" data-frag="b"><b>2 · REPLACE: name</b>REPLACE: the next piece</div>
-    <div class="arrow frag" data-frag="c">→</div><div class="step c-coral frag" data-frag="c"><b>3 · REPLACE: name</b>REPLACE: the result</div>
+<section class="slide" id="psi" data-lo="LO7">
+  <div class="kicker">Population stability index</div>
+  <h2>PSI adds up how much each bin's share moved, weighted by how far</h2>
+  <pre class="code s" data-file="tools/drift.py"><code class="language-python">def psi_from_shares(expected, actual):
+    e = np.clip(expected, EPS, None)
+    a = np.clip(actual, EPS, None)
+    return float(np.sum((a - e) * np.log(a / e)))</code></pre>
+  <div class="cols cols-3 mt">
+    <div class="stat center"><div class="big">&lt; 0.1</div><div class="lbl">stable</div></div>
+    <div class="stat center"><div class="big">0.1 – 0.25</div><div class="lbl">watch</div></div>
+    <div class="stat center"><div class="big">≥ 0.25</div><div class="lbl">shifted</div></div>
   </div>
-  <div class="callout tip mt frag"><b>Takeaway.</b> REPLACE: the one sentence to remember</div>
-  <aside class="notes">Press once per step and say what each step adds before the next one appears. REPLACE: the example to walk through</aside>
+  <aside class="notes"><p>Bins are the training data's deciles for a number, its categories for a category. The clip keeps an empty bin from dividing by zero, which is lab 4.3's exercise. The thresholds are a rule of thumb from credit scoring, adopted as Rifd's policy in the case study; they are not a standard, and a team should agree its own.</p></aside>
+</section>
+
+<section class="slide" id="ks-decoy" data-lo="LO7">
+  <div class="kicker">Significant is not large</div>
+  <h2>A p-value says a move is not chance; PSI says whether it matters</h2>
+  <table class="t small">
+    <tr><th>Week 3</th><th>KS p-value</th><th>PSI</th><th>Verdict</th></tr>
+    <tr><td>policy tenure</td><td>0.041</td><td>0.013</td><td>moved about a month: negligible</td></tr>
+    <tr class="hl"><td>channel</td><td>(category)</td><td>0.277</td><td>shifted</td></tr>
+    <tr><td>amount, all lines</td><td>9e-32</td><td>0.075</td><td>stable when pooled</td></tr>
+  </table>
+  <p class="small mt">With 3,000 claims a week, a tiny move can be significant. Report it, then say it does not matter.</p>
+  <aside class="notes"><p>Real numbers of the course's run. By week 4 the tenure p-value was 0.48: the decoy is at the edge of what 3,000 claims can detect. The amount's p-value is tiny and its pooled PSI small: the next slide shows why both are true.</p></aside>
+</section>
+
+<section class="slide" id="by-segment" data-lo="LO7">
+  <div class="kicker">Lab 4.3 · by line of business</div>
+  <h2>Pooled over all lines the amount looks stable; motor amounts shifted</h2>
+  <div class="cols cols-3">
+    <div class="stat center"><div class="big">0.064</div><div class="lbl">amount PSI, all lines, week 4</div></div>
+    <div class="stat center"><div class="big">0.290</div><div class="lbl">motor claims only</div></div>
+    <div class="stat center"><div class="big">0.010 · 0.035</div><div class="lbl">health · property</div></div>
+  </div>
+  <div class="callout tip mt"><b>Compute drift where the model behaves differently.</b> A shift in a minority segment disappears in the pooled number.</div>
+  <aside class="notes"><p>From <code>tools/drift.py --by line</code> in the course's run; week 3 had motor amounts at 0.353. The planted change multiplied motor amounts by 1.6 from week 3. Channel shifted in every line (0.23 to 0.30 in week 4), which is why it also shows pooled.</p></aside>
+</section>
+
+<section class="slide" id="what-labels-say" data-lo="LO7">
+  <div class="kicker">What Rifd can conclude</div>
+  <h2>The predictions moved at once; whether they are wrong waits for labels</h2>
+  <table class="t small">
+    <tr><th>Week</th><th>Investigate share of Farz 1.0.0</th><th>Agreement with delayed labels</th></tr>
+    <tr><td>1</td><td>20%</td><td>73.0%</td></tr>
+    <tr><td>2</td><td>19%</td><td>74.6%</td></tr>
+    <tr class="hl"><td>3</td><td>26%</td><td>not yet known</td></tr>
+    <tr class="hl"><td>4</td><td>26%</td><td>not yet known</td></tr>
+  </table>
+  <aside class="notes"><p>From the course's replay of the four weeks through Farz 1.0.0. The rise in investigations follows the inputs (larger motor amounts) and may be right: bigger claims may deserve a look. That is the honest report: data drift is certain, its effect on accuracy is unknown for two more weeks, and the retraining trigger is agreement falling once the labels arrive.</p></aside>
+</section>
+
+<section class="slide" id="check-drift" data-lo="LO7">
+  <div class="kicker">Checkpoint</div>
+  <h2>What should the drift report say?</h2>
+  <div class="quiz" data-type="single" data-lo="LO7">
+    <p class="lead">In week 3, the region mix has a PSI of 0.02. Customer age has a KS p-value of 0.001 and a PSI of 0.03. The channel has a PSI of 0.31. Labels for week 3 arrive in two weeks. Which summary is right?</p>
+    <div class="opts">
+      <div class="opt" data-why="A significant p-value with a tiny PSI is a small move, not a shift">Age and channel shifted; the model is degrading</div>
+      <div class="opt" data-why="Input drift says nothing yet about accuracy; that needs the labels">Channel shifted, so accuracy has fallen and the model must be retrained now</div>
+      <div class="opt" data-why="The channel's PSI is far above any threshold">Nothing shifted, since all p-values are below 0.05</div>
+      <div class="opt" data-ok>Channel shifted; age moved slightly and does not matter; accuracy is unknown until the labels arrive</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> Name the large shift, set aside the significant but tiny move, and say what the missing labels leave open.</div>
+  </div>
+  <aside class="notes"><p>Answer: D. This is the shape of the drift report participants write in lab 4.3; the check also refuses a report that calls tenure shifted.</p></aside>
 </section>
 
 <section class="slide lab" id="lab-4-3" data-auto="lab" data-lab="4.3">
-  <aside class="notes">REPLACE: what to watch for while participants work, the typical problems, and the fallback for anyone who did not finish an earlier lab</aside>
+  <aside class="notes"><p>AI policy: tutor. Usual problems: <code>np.log</code> of zero when the clip is forgotten; computing PSI on the replay weeks against each other instead of the training data; reading only the pooled numbers. On a slow laptop the four replays take several minutes at the requested rate; start them before explaining PSI. Solution: <code>labs/solutions/S4_3.py</code>.</p></aside>
 </section>
 
 <!-- Session 4 -->
 
 <section class="slide section" id="s4" data-auto="section" data-session="4"></section>
 
-<section class="slide" id="s4-idea" data-lo="LO5">
-  <div class="kicker">REPLACE: the question this slide answers</div>
-  <h2>REPLACE: one idea, stated as a sentence</h2>
+<section class="slide" id="symptom-alerts" data-lo="LO5">
+  <div class="kicker">Alerts</div>
+  <h2>Alert on what callers feel, not on everything that can be measured</h2>
   <div class="cols cols-2">
-    <ul class="bullets">
-      <li>REPLACE: at most six bullets, each a complete thought</li>
-      <li>REPLACE: bold the key phrase; numbers come from the lab run, not from memory</li>
-    </ul>
-    <div class="card c-teal"><h4>In the case study</h4><p class="small mb0">REPLACE: tie the idea to the case study and its data</p></div>
+    <div class="card c-teal flat"><h4>Page someone</h4><ul class="bullets small mb0"><li>errors above 1% for two minutes</li><li>95th percentile above 150 ms for five minutes</li></ul></div>
+    <div class="card c-navy flat"><h4>Put on a dashboard</h4><ul class="bullets small mb0"><li>CPU of one pod</li><li>one slow request</li><li>a label share moving slowly: a weekly drift report</li></ul></div>
   </div>
-  <div class="callout warn mt"><b>What goes wrong.</b> REPLACE: the failure participants will hit, and how to recognise it</div>
-  <aside class="notes">REPLACE: what to say, the demo to run, the question to ask the room, the common failure and its fix</aside>
+  <div class="callout warn mt"><b>What goes wrong.</b> An alert that fires and resolves by itself every few hours trains the on-call engineer to ignore it.</div>
+  <aside class="notes"><p>Symptom-based alerting follows the Google SRE book's advice: page on what users experience and keep causes for dashboards. The label-share criterion is for releases, where the comparison is clear; slow movement of the shares belongs to the drift report.</p></aside>
 </section>
 
-<section class="slide" id="s4-steps" data-lo="LO5">
-  <div class="kicker">Step by step</div>
-  <h2>REPLACE: a process, shown one step per key press</h2>
-  <div class="flow">
-    <div class="step c-teal"><b>1 · REPLACE: name</b>REPLACE: what happens first</div>
-    <div class="arrow frag" data-frag="b">→</div><div class="step c-cyan frag" data-frag="b"><b>2 · REPLACE: name</b>REPLACE: the next piece</div>
-    <div class="arrow frag" data-frag="c">→</div><div class="step c-coral frag" data-frag="c"><b>3 · REPLACE: name</b>REPLACE: the result</div>
+<section class="slide" id="alert-rule" data-lo="LO5">
+  <div class="kicker">A rule</div>
+  <h2>An expression, a duration, a severity and a runbook link</h2>
+  <pre class="code s" data-file="monitoring/alerts.yml"><code class="language-yaml">- alert: FarzLatencyP95High
+  expr: histogram_quantile(0.95, sum by (le) (rate(rifd_request_duration_seconds_bucket{route="/v1/triage"}[5m]))) &gt; 0.15
+  for: 5m
+  labels: {severity: page}
+  annotations:
+    summary: The 95th-percentile triage latency is above the 150 ms objective
+    runbook_url: RUNBOOK.md#latency</code></pre>
+  <aside class="notes"><p>Prometheus' rule format, which <code>promlite</code> reads too. The expression is the dashboard's query with a threshold; <code>for:</code> asks that it holds at every evaluation for five minutes before the alert fires. Participants write both rules without AI help first in lab 4.4.</p></aside>
+</section>
+
+<section class="slide" id="test-on-recording" data-lo="LO5">
+  <div class="kicker">Lab 4.4 · testing the rules</div>
+  <h2>Test alerts on a recording, before they wake anyone</h2>
+  <table class="t small">
+    <tr><th>Rules</th><th>Blip at minute 6</th><th>Errors, minutes 12 to 18</th><th>Latency from minute 22</th></tr>
+    <tr class="hl"><td>Reference: errors 1m, for 2m; latency 5m, for 5m</td><td>quiet</td><td>fires 14.0 to 18.8</td><td>fires from 28.0</td></tr>
+    <tr><td>Same, no <code>for:</code></td><td>quiet</td><td>fires from 12.0</td><td>fires from 23.0</td></tr>
+    <tr><td>Latency over 1m, no <code>for:</code></td><td>fires 6.0 to 7.8</td><td>unchanged rule: 14.0 to 18.8</td><td>fires from 22.0</td></tr>
+  </table>
+  <aside class="notes"><p>From the course's run of <code>promlite rules</code> on <code>spike.jsonl</code>, 30 minutes scraped every 15 seconds. In the third row only the latency rule changed. Adding <code>for: 2m</code> to that 1-minute rule silenced the blip again and fired from minute 24.0. Both the window and the duration buy quiet with delay; choose them from what Munira can tolerate. <code>promtool test rules</code> does the same for real Prometheus.</p></aside>
+</section>
+
+<section class="slide" id="runbook" data-lo="LO5 LO7">
+  <div class="kicker">The runbook</div>
+  <h2>One page the on-call engineer can follow in the middle of the night</h2>
+  <div class="cols cols-2">
+    <ul class="bullets small">
+      <li><b>Accountable for a rollback decision:</b> Munira Al-Ajmi</li>
+      <li>For each alert: what the caller sees, the first three checks</li>
+      <li>When to roll back, and the exact command</li>
+      <li>Who to tell: Munira, the platform channel, Bassam if personal data may have leaked</li>
+    </ul>
+    <div class="card c-amber tint"><h4>Linked from the alert</h4><p class="small mb0"><code>runbook_url: RUNBOOK.md#errors</code>: the page opens from the notification.</p></div>
   </div>
-  <div class="callout tip mt frag"><b>Takeaway.</b> REPLACE: the one sentence to remember</div>
-  <aside class="notes">Press once per step and say what each step adds before the next one appears. REPLACE: the example to walk through</aside>
+  <aside class="notes"><p>The check refuses a runbook without an accountable name. Ask: who in your organisation is named in a runbook as accountable for a model's decisions? Often nobody, which is the gap this slide is about.</p></aside>
+</section>
+
+<section class="slide" id="choose-capstone" data-lo="LO1">
+  <div class="kicker">Tomorrow</div>
+  <h2>Choose the model you will take to a monitored service</h2>
+  <div class="cols cols-3">
+    <div class="card c-teal"><h4>Farz</h4><p class="small mb0">The course's model, with every artefact you built this week.</p></div>
+    <div class="card c-cyan"><h4>Shabih</h4><p class="small mb0">The similar-claims model, with its own memory, start-up and release questions.</p></div>
+    <div class="card c-purple"><h4>Your own</h4><p class="small mb0">A model from your work, with synthetic or public data only.</p></div>
+  </div>
+  <p class="small mt">Write the choice, the reason and the objective you will defend in <code>CAPSTONE.md</code>.</p>
+  <aside class="notes"><p>Remind participants that their own model must use no real personal data in a public repository. The defence is eight minutes and four minutes of questions, and the assessor injects a fault during it.</p></aside>
+</section>
+
+<section class="slide" id="check-alerts" data-lo="LO5">
+  <div class="kicker">Checkpoint</div>
+  <h2>Why does this alert flap?</h2>
+  <div class="quiz" data-type="single" data-lo="LO5">
+    <p class="lead">An alert on the 95th-percentile latency uses a 30-second rate window and no for: duration. It fires for a minute about twice a day and resolves by itself. Callers never complain. What is the best first change?</p>
+    <div class="opts">
+      <div class="opt" data-why="The objective is the threshold; moving it hides real breaches">Raise the threshold to 300 ms</div>
+      <div class="opt" data-ok>Lengthen the window and add a for: duration, then test on a recording</div>
+      <div class="opt" data-why="An alert nobody acts on is worse than none, whoever receives it">Send it to a wider group</div>
+      <div class="opt" data-why="Deleting it leaves sustained breaches unseen">Delete the alert</div>
+    </div>
+    <div class="callout tip why"><b>Why.</b> A short window and no duration react to blips; a longer window and a duration fire only on sustained breaches, which the recording can prove.</div>
+  </div>
+  <aside class="notes"><p>Answer: B. Then ask what the change costs: a slower alert. The recording shows how much slower.</p></aside>
 </section>
 
 <section class="slide lab" id="lab-4-4" data-auto="lab" data-lab="4.4">
-  <aside class="notes">REPLACE: what to watch for while participants work, the typical problems, and the fallback for anyone who did not finish an earlier lab</aside>
+  <aside class="notes"><p>AI policy: off for the first attempt at the two rules. Usual problems: YAML indentation; <code>status=~"5.."</code> written with single quotes; a threshold of 150 instead of 0.15 (the histogram is in seconds); a runbook without an accountable name. Solution: <code>labs/solutions/S4_4.py</code>.</p></aside>
 </section>
 
-<section class="slide" id="wrap-up">
+<section class="slide" id="wrap-up" data-lo="LO7 LO5">
   <div class="kicker">Day 4 · wrap-up</div>
-  <h2>Three things to keep</h2>
+  <h2>Three things to keep from the course</h2>
   <div class="cols cols-3">
-    <div class="card c-teal"><h4>Remember</h4><p class="small mb0">REPLACE: one idea participants keep</p></div>
-    <div class="card c-coral"><h4>Remember</h4><p class="small mb0">REPLACE: one idea participants keep</p></div>
-    <div class="card c-purple"><h4>Remember</h4><p class="small mb0">REPLACE: one idea participants keep</p></div>
+    <div class="card c-teal"><h4>Release on evidence</h4><p class="small mb0">A canary against written criteria, compared like with like, and a log entry with its files.</p></div>
+    <div class="card c-cyan"><h4>Roll back first</h4><p class="small mb0">A named person is accountable; the criteria let the person on call act at once.</p></div>
+    <div class="card c-coral"><h4>Watch inputs, wait for labels</h4><p class="small mb0">Drift by segment, significant is not large, and alerts tested before they page.</p></div>
   </div>
+  <aside class="notes"><p>Ask each participant which of the three their team would adopt first. Tomorrow is the capstone: build, defend, and recover from the fault the assessor injects.</p></aside>
 </section>
 
-<section class="slide dark" id="next" data-label="Next">
+<section class="slide dark" id="next" data-lo="LO1">
   <div class="kicker">Next</div>
-  <h2>Capstone: Capstone project presentations</h2>
-  <p class="lead">REPLACE: what participants prepare before then; unfinished labs can be finished at home</p>
-  <aside class="notes">REPLACE: accounts, installs or reading participants need before the next unit</aside>
+  <h2>Day 5: the capstone</h2>
+  <ul class="bullets">
+    <li>Bring your <code>CAPSTONE.md</code> and a public GitHub repository with the service, its container file and manifests</li>
+    <li>Dashboard and alerts as code, a load test against your objective, a recorded canary and rollback, a drift check</li>
+    <li>Eight minutes to defend, four minutes of questions, one injected fault</li>
+  </ul>
+  <aside class="notes"><p>Give the rubric now (20/20/20/15/25) so that nobody meets it for the first time tomorrow. The capstone deck has the details.</p></aside>
 </section>

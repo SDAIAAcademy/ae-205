@@ -1,37 +1,54 @@
 <article class="lab" data-lab="4.4">
   <div class="box goal">
     <h3>Goal</h3>
-    <p>REPLACE: by the end, participants can …</p>
+    <p>Write two alert rules for Farz, one on the error ratio and one on the 95th-percentile latency, prove on a recorded series that they fire on the real problems and stay quiet on a one-minute blip, and write the one-page runbook the on-call engineer opens when they fire.</p>
   </div>
 
   <h2>What you need</h2>
   <ul>
-    <li>REPLACE: the files, the tool and the account the lab uses</li>
+    <li>The lab folder <code>rifd-labs/4.4</code>: an empty rule group in <code>monitoring/alerts.yml</code>, <code>RUNBOOK.md</code> and <code>CAPSTONE.md</code> to fill</li>
+    <li>The recording <code>../data/recordings/spike.jsonl</code>: 30 minutes of Farz's metrics, one scrape every 15 seconds, with a latency blip at minute 6, an error spike from minute 12 to 18 and a sustained latency rise from minute 22</li>
+    <li>AI policy: off for the first attempt at the two rules. Write them yourself, test them, then compare with an assistant if you want to.</li>
   </ul>
 
   <div class="step">
-    <h3>REPLACE: the first step <span class="min">15 min</span></h3>
-    <p>REPLACE: what to do and why, in two sentences</p>
-    <div class="prompt" data-tool="Container runtime and image builder">REPLACE: the prompt participants copy, with the parts they change in <span class="ph">colour</span></div>
+    <h3>Write the two rules without AI help <span class="min">8 min</span></h3>
+    <p>In <code>monitoring/alerts.yml</code>, write <code>FarzErrorRatioHigh</code>: the rate of triage requests with a 5xx status divided by the rate of all triage requests, above 0.01. Write <code>FarzLatencyP95High</code>: the 95th percentile from the histogram, above 0.15. Give each a <code>for:</code> duration, a <code>severity</code> label and a <code>runbook_url</code> annotation pointing at a section of <code>RUNBOOK.md</code>.</p>
   </div>
 
   <div class="step">
-    <h3>REPLACE: the second step <span class="min">10 min</span></h3>
-    <p>REPLACE: what to do and why, in two sentences</p>
+    <h3>Test them on the recorded spike <span class="min">6 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">cd rifd-labs/4.4
+uv run python tools/promlite.py rules --series ../data/recordings/spike.jsonl --rules monitoring/alerts.yml</code></pre>
+    <p>Each rule must fire on its problem and not at minute 6. If the latency rule fires on the blip, change its window or its <code>for:</code> and test again. Real Prometheus tests rules the same way with <code>promtool test rules</code>.</p>
+  </div>
+
+  <div class="step">
+    <h3>Write the one-page runbook <span class="min">8 min</span></h3>
+    <p>Fill <code>RUNBOOK.md</code>: who is accountable for a rollback decision, then for each alert what the caller sees, the first three checks, when to roll back and how, and who to tell.</p>
+  </div>
+
+  <div class="step">
+    <h3>Choose the capstone model; check <span class="min">3 min</span></h3>
+    <p>In <code>CAPSTONE.md</code>, name the model you will take to a monitored service in the capstone, why, and the latency objective you will defend.</p>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run ../lab.py check 4.4</code></pre>
   </div>
 
   <div class="step stretch">
     <h3>✱ Stretch</h3>
-    <p>REPLACE: an extension for those who finish early</p>
+    <p>Add a burn-rate alert on the error objective over two windows and test it on the same recording.</p>
   </div>
 
   <h2>Check yourself</h2>
   <ol class="checks">
-    <li>REPLACE: a question that shows the lab worked</li>
+    <li>Which of your two settings, the rate window or the <code>for:</code> duration, kept the latency rule quiet at minute 6?</li>
+    <li>The error rule fired two minutes after the spike began. Is that too slow for Rifd?</li>
+    <li>The on-call engineer sees FarzErrorRatioHigh ten minutes after a release. What does the runbook let them do before they reach Munira?</li>
   </ol>
 
   <details class="instructor">
     <summary>For the trainer</summary>
-    <p>REPLACE: the answer key, the traps and the common errors</p>
+    <p>In the course's run the reference rules (error ratio over 1m with <code>for: 2m</code>; 95th percentile over 5m with <code>for: 5m</code>) fired from minute 14.0 to 18.8 and from minute 28.0 to the end, and not at minute 6. Without any <code>for:</code> they fired from minute 12.0 and from minute 23.0, and the 5-minute window alone still kept the blip out. With a 1-minute latency window and no <code>for:</code>, the latency rule fired on the blip from minute 6.0 to 7.8; adding <code>for: 2m</code> to that rule silenced the blip and fired from minute 24.0.</p>
+    <p>So both settings trade speed for quiet: tell participants to choose them from what the caller feels and how fast the team can act. Answers: depends on the rules they wrote, which is the point of testing; two minutes is within Munira's five-minute rollback limit; roll back first when a written criterion holds, then tell Munira. Solution: <code>labs/solutions/S4_4.py</code>.</p>
   </details>
 </article>

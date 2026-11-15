@@ -1,37 +1,57 @@
 <article class="lab" data-lab="4.3">
   <div class="box goal">
     <h3>Goal</h3>
-    <p>REPLACE: by the end, participants can …</p>
+    <p>Replay four weeks of new claims through Farz, measure for each feature how far its distribution moved from the training data, name the features that really shifted (and in which line of business), rule out one that only looks significant, and say what the delayed labels allow Rifd to conclude.</p>
   </div>
 
   <h2>What you need</h2>
   <ul>
-    <li>REPLACE: the files, the tool and the account the lab uses</li>
+    <li>The lab folder <code>rifd-labs/4.3</code>, with <code>tools/drift.py</code> missing its PSI function and an empty <code>DRIFT_REPORT.md</code></li>
+    <li>The four replay weeks <code>../data/replay/week1.csv</code> to <code>week4.csv</code> and the labels that have arrived: <code>labels_week1.csv</code> and <code>labels_week2.csv</code></li>
+    <li>AI policy: tutor.</li>
   </ul>
 
   <div class="step">
-    <h3>REPLACE: the first step <span class="min">15 min</span></h3>
-    <p>REPLACE: what to do and why, in two sentences</p>
-    <div class="prompt" data-tool="Container runtime and image builder">REPLACE: the prompt participants copy, with the parts they change in <span class="ph">colour</span></div>
+    <h3>Replay the four weeks through the service <span class="min">5 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">cd rifd-labs/4.3
+uv run uvicorn rifd.app:app --port 8000 &amp;
+for w in 1 2 3 4; do uv run python tools/replay.py --file ../data/replay/week$w.csv --rate 150 --out runs/week$w.jsonl; done</code></pre>
+    <p>Each line of <code>runs/weekN.jsonl</code> holds the claim id and the label Farz gave. Count the labels per week while the next step runs.</p>
   </div>
 
   <div class="step">
-    <h3>REPLACE: the second step <span class="min">10 min</span></h3>
-    <p>REPLACE: what to do and why, in two sentences</p>
+    <h3>Compute population stability and a KS test per feature <span class="min">9 min</span></h3>
+    <p>In <code>tools/drift.py</code>, write <code>psi_from_shares</code>: the sum over bins of (actual share minus expected share) times the log of their ratio, with both shares clipped at <code>EPS</code> so that an empty bin does not divide by zero. Then run it, also by line of business.</p>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run python tools/drift.py --weeks ../data/replay/week1.csv ../data/replay/week2.csv \
+  ../data/replay/week3.csv ../data/replay/week4.csv --by line --out runs/drift.json</code></pre>
+  </div>
+
+  <div class="step">
+    <h3>Name the shifted features; check the labels you have <span class="min">7 min</span></h3>
+    <p>Read the table: which features pass 0.25, from which week, and in which line? Which feature has a small p-value but a tiny PSI? Then compare Farz's labels for weeks 1 and 2 with <code>labels_week1.csv</code> and <code>labels_week2.csv</code>.</p>
+  </div>
+
+  <div class="step">
+    <h3>Write the drift report; check <span class="min">4 min</span></h3>
+    <p>Fill every row of <code>DRIFT_REPORT.md</code>, including what the labels cannot show yet and your recommendation.</p>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run ../lab.py check 4.3</code></pre>
   </div>
 
   <div class="step stretch">
     <h3>✱ Stretch</h3>
-    <p>REPLACE: an extension for those who finish early</p>
+    <p>Recompute the statistics with Evidently and compare its verdicts with yours.</p>
   </div>
 
   <h2>Check yourself</h2>
   <ol class="checks">
-    <li>REPLACE: a question that shows the lab worked</li>
+    <li>Why does the amount look stable over all claims and shifted for motor claims?</li>
+    <li>Policy tenure has a KS p-value of 0.04 in week 3. Why is it not in your list of shifted features?</li>
+    <li>What would have to arrive before Rifd can say whether Farz is still right in week 4?</li>
   </ol>
 
   <details class="instructor">
     <summary>For the trainer</summary>
-    <p>REPLACE: the answer key, the traps and the common errors</p>
+    <p>The course's run of the finished tool (reference: the 40,000 training claims) gave, in week 4: channel PSI 0.263 (0.277 in week 3), shifted in every line; amount over all lines 0.064, but motor amounts 0.290 (0.353 in week 3) with health 0.010 and property 0.035; policy tenure in week 3 a KS p-value of 0.041 with a PSI of 0.013, and in week 4 a p-value of 0.48. Farz's investigate share rose from 20% and 19% in weeks 1 and 2 to 26% in weeks 3 and 4; its agreement with the delayed labels was 73.0% in week 1 and 74.6% in week 2.</p>
+    <p>The planted drift: motor amounts multiplied by 1.6 and the app's share of the channel raised to 70% from week 3, and tenure moved by about a month as a decoy. The thresholds 0.1 and 0.25 are Rifd's policy in the case study, a common rule of thumb, not a standard. Answers: motor claims are a minority, so pooling dilutes their shift; a p-value says the move is not chance, the PSI says it is small; the labels of weeks 3 and 4, which arrive about two weeks later. Solution: <code>labs/solutions/S4_3.py</code>.</p>
   </details>
 </article>

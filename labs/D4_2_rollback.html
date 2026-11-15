@@ -1,37 +1,67 @@
 <article class="lab" data-lab="4.2">
   <div class="box goal">
     <h3>Goal</h3>
-    <p>REPLACE: by the end, participants can …</p>
+    <p>Release farz 1.2.0 as a canary behind 1.1.0, watch it against Munira's written criteria, roll it back within five minutes of the first criterion firing, then find the cause and record the evidence.</p>
   </div>
 
   <h2>What you need</h2>
   <ul>
-    <li>REPLACE: the files, the tool and the account the lab uses</li>
+    <li>The lab folder <code>rifd-labs/4.2</code> with farz 1.1.0 (now current) and 1.2.0 in <code>models/</code>, the router and <code>tools/compare.py</code></li>
+    <li><code>../data/rollback_criteria.md</code> and <code>.json</code>: judge after 200 canary requests; roll back on errors above 1%, a 95th percentile above 150 ms, or a label share that differs by more than 10 points</li>
+    <li>AI policy: tutor.</li>
   </ul>
 
   <div class="step">
-    <h3>REPLACE: the first step <span class="min">15 min</span></h3>
-    <p>REPLACE: what to do and why, in two sentences</p>
-    <div class="prompt" data-tool="Container runtime and image builder">REPLACE: the prompt participants copy, with the parts they change in <span class="ph">colour</span></div>
+    <h3>Read the criteria; start the canary of 1.2.0 <span class="min">5 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">cd rifd-labs/4.2
+cat ../data/rollback_criteria.md
+RIFD_MODEL_DIR=models/farz-1.1.0 uv run uvicorn rifd.app:app --host 127.0.0.1 --port 8001 --log-level warning &amp;
+RIFD_MODEL_DIR=models/farz-1.2.0 uv run uvicorn rifd.app:app --host 127.0.0.1 --port 8002 --log-level warning &amp;
+uv run python tools/router.py --stable http://127.0.0.1:8001 --canary http://127.0.0.1:8002 --weight 0.10 --port 8000 &amp;
+uv run python tools/replay.py --file ../data/replay/week2.csv --url http://127.0.0.1:8000 --rate 50 --out runs/canary.jsonl &amp;</code></pre>
   </div>
 
   <div class="step">
-    <h3>REPLACE: the second step <span class="min">10 min</span></h3>
-    <p>REPLACE: what to do and why, in two sentences</p>
+    <h3>Watch until a criterion fires <span class="min">6 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run python tools/compare.py runs/canary.jsonl --criteria ../data/rollback_criteria.json \
+  --stable 1.1.0 --canary 1.2.0 --watch --json runs/compare.json</code></pre>
+  </div>
+
+  <div class="step">
+    <h3>Roll back and time it <span class="min">5 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">curl -s -X POST 127.0.0.1:8000/admin/weight -H "content-type: application/json" \
+  -d '{"canary": 0, "reason": "criterion 3: investigate share"}'
+kill %4
+uv run python tools/replay.py --file ../data/replay/week2.csv --url http://127.0.0.1:8000 --rate 20 --limit 60 --out runs/after_rollback.jsonl</code></pre>
+    <p>Roll back first, diagnose second. <code>runs/router_events.jsonl</code> records when the release started and when the share went to 0.</p>
+  </div>
+
+  <div class="step">
+    <h3>Find the cause; write the release log <span class="min">6 min</span></h3>
+    <p>Compare <code>models/farz-1.1.0/metadata.json</code> with <code>models/farz-1.2.0/metadata.json</code>. Fill <code>RELEASE_LOG.md</code>, including the seconds to share 0, the cause, and who decided.</p>
+  </div>
+
+  <div class="step">
+    <h3>Check <span class="min">3 min</span></h3>
+    <pre class="code" data-file="terminal"><code class="language-bash">uv run ../lab.py check 4.2</code></pre>
+    <p>Stop the three servers.</p>
   </div>
 
   <div class="step stretch">
     <h3>✱ Stretch</h3>
-    <p>REPLACE: an extension for those who finish early</p>
+    <p>Do the same rollback on the cluster with <code>kubectl rollout undo</code> and compare the time.</p>
   </div>
 
   <h2>Check yourself</h2>
   <ol class="checks">
-    <li>REPLACE: a question that shows the lab worked</li>
+    <li>Which criterion fired, and after how many canary requests?</li>
+    <li>Errors and latency looked healthy. What would have happened without a criterion on the label shares?</li>
+    <li>Why did the on-call engineer not wait for Munira before setting the share to 0?</li>
   </ol>
 
   <details class="instructor">
     <summary>For the trainer</summary>
-    <p>REPLACE: the answer key, the traps and the common errors</p>
+    <p>In the course's run the watch fired at 203 canary requests, 43 s after the release started: the investigate share was 37% against 19% for 1.1.0 and the standard share 24% against 42% (the latency criterion also fired, because the shared laptop was overloaded). The share went to 0 44 s after the start, and all 60 claims replayed afterwards were answered by 1.1.0.</p>
+    <p>The cause is planted in <code>metadata.json</code>: farz 1.2.0's decision rule sends a claim to investigate at a probability of 0.05 instead of 0.30, so the model file is fine and the release is not. Answers: the label-share criterion, after the minimum of 200 canary requests; adjusters would have received about twice as many investigations, and nobody would have seen it in the errors or latency; the criteria were written in advance so that the on-call engineer can act at once and tell Munira. Solution: <code>labs/solutions/S4_2.py</code>.</p>
   </details>
 </article>
